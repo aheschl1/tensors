@@ -1,6 +1,6 @@
-use std::{cmp::Ordering, ops::{Index, IndexMut}};
+use std::{marker::PhantomData, ops::{Index, IndexMut}};
 
-use crate::ndarray::{Dim, Shape, Stride, TensorOwned, TensorView, TensorViewMut, shape_to_stride};
+use crate::ndarray::{Dim, Shape, Stride, TensorOwned, TensorView, TensorViewBase, TensorViewMut};
 
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -19,7 +19,6 @@ pub enum Idx {
 
 pub trait ViewableTensor<T: Sized> {
     fn view(&self) -> TensorView<'_, T>;
-    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T>, TensorError>;
 }
 pub trait ViewableTensorMut<T: Sized>: ViewableTensor<T> {
     fn view_mut(&mut self) -> TensorViewMut<'_, T>;
@@ -32,79 +31,23 @@ impl<T: Sized> ViewableTensor<T> for TensorOwned<T> {
             stride: self.stride.clone(),
             offset: 0,
             shape: self.shape.clone(),
-        }
-    }
-    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T>, TensorError> {
-        let new_size: usize = shape.iter().product();
-        let old_size: usize = self.size();
-        match new_size.cmp(&old_size) {
-            Ordering::Equal => {
-                let tensor = TensorView{
-                    raw: &self.raw,
-                    stride: shape_to_stride(&shape),
-                    offset: 0,
-                    shape,
-                };
-                Ok(tensor)
-            },
-            _ => Err(TensorError::InvalidShape)
-        }
-        
-    }
-}
-// TODO beware vec clones of Shape and Stride
-impl<T: Sized> ViewableTensor<T> for TensorView<'_, T> {
-    fn view(&self) -> TensorView<'_, T> {
-        TensorView{
-            raw: self.raw,
-            stride: self.stride.clone(),
-            offset: self.offset,
-            shape: self.shape.clone(),
-        }
-    }
-    
-    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T>, TensorError> {
-        let new_size: usize = shape.iter().product();
-        let old_size = self.size();
-        match new_size.cmp(&old_size) {
-            Ordering::Equal => {
-                let tensor = TensorView{
-                    raw: self.raw,
-                    stride: shape_to_stride(&shape),
-                    offset: self.offset,
-                    shape,
-                };
-                Ok(tensor)
-            },
-            _ => Err(TensorError::InvalidShape)
+            _l: PhantomData,
+            _t: PhantomData,
         }
     }
 }
 
-impl<T: Sized> ViewableTensor<T> for TensorViewMut<'_, T> {
+impl<'a, T, B> ViewableTensor<T> for TensorViewBase<'a, T, B> 
+where B: AsRef<[T]> + 'a
+{
     fn view(&self) -> TensorView<'_, T> {
         TensorView{
-            raw: self.raw,
+            raw: self.raw.as_ref(),
             stride: self.stride.clone(),
             offset: self.offset,
             shape: self.shape.clone(),
-        }
-    }
-
-    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T>, TensorError> {
-        let new_size: usize = shape.iter().product();
-        let old_size = self.size();
-        match new_size.cmp(&old_size) {
-            Ordering::Equal => {
-                let tensor = TensorView{
-                    raw: self.raw,
-                    stride: shape_to_stride(&shape),
-                    offset: self.offset,
-                    shape,
-                };
-                Ok(tensor)
-            },
-            _ => Err(TensorError::InvalidShape)
+            _l: PhantomData,
+            _t: PhantomData,
         }
     }
 }
@@ -116,6 +59,8 @@ impl<T: Sized> ViewableTensorMut<T> for TensorViewMut<'_, T> {
             stride: self.stride.clone(),
             offset: self.offset,
             shape: self.shape.clone(),
+            _l: PhantomData,
+            _t: PhantomData,
         }
     }
 }
@@ -127,6 +72,8 @@ impl<T: Sized> ViewableTensorMut<T> for TensorOwned<T> {
             stride: self.stride.clone(),
             offset: 0,
             shape: self.shape.clone(),
+            _l: PhantomData,
+            _t: PhantomData,
         }
     }
 }
@@ -179,6 +126,7 @@ pub trait TensorMut<T>: Tensor<T> {
         Ok(())
     }
 }
+
 impl<T, W> Tensor<T> for W 
 where W: ViewableTensor<T>
 {

@@ -1,4 +1,7 @@
-use crate::ndarray::tensor::{TensorError, ViewableTensor};
+
+use std::{cmp::Ordering, marker::PhantomData};
+
+use crate::ndarray::tensor::{TensorError};
 
 pub mod tensor;
 
@@ -13,20 +16,41 @@ pub struct TensorOwned<T: Sized>{
     shape: Shape,
 }
 
-#[derive(Debug)]
-pub struct TensorView<'a, T: Sized>{
-    raw: &'a [T], // row major order
+pub struct TensorViewBase<'a, T, B> 
+where B: AsRef<[T]> + 'a
+{
+    raw: B,
     stride: Stride,
     shape: Shape,
     pub(crate) offset: usize,
+    _l: PhantomData<&'a ()>,
+    _t: PhantomData<T>,
 }
 
-#[derive(Debug)]
-pub struct TensorViewMut<'a, T: Sized>{
-    raw: &'a mut [T], // row major order
-    stride: Stride,
-    shape: Shape,
-    pub(crate) offset: usize,
+pub type TensorView<'a, T> = TensorViewBase<'a, T, &'a [T]>;
+pub type TensorViewMut<'a, T> = TensorViewBase<'a, T, &'a mut [T]>;
+
+impl<'a, T, B> TensorViewBase<'a, T, B> 
+where B: AsRef<[T]> + 'a
+{
+    fn view_as(self, shape: Shape) -> Result<Self, TensorError> {
+        let new_size: usize = shape.iter().product();
+        let old_size = self.shape.iter().product();
+        match new_size.cmp(&old_size) {
+            Ordering::Equal => {
+                let tensor = Self{
+                    raw: self.raw,
+                    stride: shape_to_stride(&shape),
+                    offset: self.offset,
+                    shape,
+                    _l: PhantomData,
+                    _t: PhantomData,
+                };
+                Ok(tensor)
+            },
+            _ => Err(TensorError::InvalidShape)
+        }
+    }
 }
 
 impl<T: Sized> TensorOwned<T> {
@@ -215,17 +239,6 @@ mod tests {
         *slice.get_mut(&Idx::At(1)).unwrap() = 50;
         assert_eq!(*index_tensor(Idx::At(1), &slice).unwrap(), 50);
         assert_eq!(*index_tensor(Idx::Coord(vec![1, 1]), &tensor).unwrap(), 50);
-
-        // TODO figure out
-        // mut slice of mut slice
-        // drops previous mutable borrow
-        // let mut slice_of_slice = slice.slice_mut(0, 2).unwrap(); //
-        // assert_eq!(*slice_of_slice.shape(), vec![]);
-        // assert_eq!(*slice_of_slice.get(&[]).unwrap(), 6);
-        // *slice_of_slice.get_mut(&[]).unwrap() = 60;
-        // assert_eq!(*slice_of_slice.get(&[]).unwrap(), 60);
-        // assert_eq!(*slice.get(&[2]).unwrap(), 60);
-        // assert_eq!(*tensor.get(&[1, 2]).unwrap(), 60);
     }
 
     #[test]
@@ -329,7 +342,7 @@ mod tests {
         let buf = vec![1, 2, 3, 4, 5, 6];
         let shape = vec![2, 3];
         let tensor = make_tensor(buf, shape);
-        let reshaped = tensor.view_as(vec![3, 2]).unwrap();
+        let reshaped = tensor.view().view_as(vec![3, 2]).unwrap();
         assert_eq!(reshaped.shape(), vec![3, 2]);
         assert_eq!(reshaped.stride(), vec![2, 1]);
         // Row-major sequence preserved
@@ -346,7 +359,7 @@ mod tests {
         let buf = vec![1, 2, 3, 4, 5, 6];
         let shape = vec![2, 3];
         let tensor = make_tensor(buf, shape);
-        assert!(matches!(tensor.view_as(vec![4, 2]), Err(TensorError::InvalidShape)));
+        assert!(matches!(tensor.view().view_as(vec![4, 2]), Err(TensorError::InvalidShape)));
     }
 
     #[test]
@@ -556,5 +569,96 @@ mod tests {
     fn test_index_mut_wrong_dims_panic() {
         let mut tensor = make_tensor(vec![1, 2, 3], vec![3]);
         tensor[vec![0, 0]] = 4;
+    }
+
+    // --- Additional coverage tests ---
+    #[test]
+    fn test_set_method() {
+        let mut tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![2, 3]);
+        assert!(matches!(tensor.set(&Idx::Coord(vec![1, 2]), 99), Ok(())));
+        assert_eq!(tensor[vec![1, 2]], 99);
+    }
+
+    #[test]
+    fn test_is_row_and_is_column() {
+        let row = TensorOwned::row(vec![1, 2, 3]);
+        let col = TensorOwned::column(vec![1, 2, 3]);
+        let scalar = TensorOwned::scalar(10);
+        assert!(row.is_row());
+        assert!(!row.is_column());
+        assert!(!col.is_row());
+        assert!(col.is_column());
+        assert!(scalar.is_scalar());
+        assert!(!scalar.is_row());
+        assert!(!scalar.is_column());
+    }
+
+    #[test]
+    fn test_slice_scalar_error() {
+        let scalar = TensorOwned::scalar(5);
+        assert!(matches!(scalar.slice(0, 0), Err(super::TensorError::InvalidDim)));
+    }
+
+    #[test]
+    fn test_view_as_slice_error() {
+        let tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![2, 3]);
+        let slice = tensor.slice(0, 0).unwrap(); // shape [3]
+        assert!(matches!(slice.view_as(vec![2, 2]), Err(super::TensorError::InvalidShape)));
+    }
+
+    #[test]
+    fn test_view_mut_as_error() {
+        let mut tensor = make_tensor(vec![1, 2, 3, 4], vec![2, 2]);
+        let view_mut = tensor.view_mut();
+        assert!(matches!(view_mut.view_as(vec![3, 2]), Err(super::TensorError::InvalidShape)));
+    }
+
+    #[test]
+    fn test_item_wrong_dims_error() {
+        let tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![2, 3]);
+        assert!(matches!(tensor.get(&Idx::Item), Err(super::TensorError::WrongDims)));
+    }
+
+    #[test]
+    fn test_from_buf_empty_shape_error() {
+        assert!(matches!(TensorOwned::from_buf(Vec::<i32>::new(), vec![]), Err(super::TensorError::InvalidShape)));
+    }
+
+    #[test]
+    fn test_modify_after_reshape_reflects() {
+        let mut tensor = make_tensor(vec![1, 2, 3, 4], vec![2, 2]);
+        {
+            let view_mut = tensor.view_mut();
+            let mut reshaped = view_mut.view_as(vec![4]).unwrap();
+            *reshaped.get_mut(&Idx::At(3)).unwrap() = 40; // modify last element
+            assert_eq!(*reshaped.get(&Idx::At(3)).unwrap(), 40);
+        }
+        assert_eq!(tensor[vec![1, 1]], 40);
+    }
+
+    #[test]
+    fn test_slice_single_dim_to_scalar() {
+        let tensor = make_tensor(vec![42], vec![1]);
+        let slice = tensor.slice(0, 0).unwrap();
+        assert_eq!(slice.shape(), vec![]);
+        assert_eq!(*slice.get(&Idx::Item).unwrap(), 42);
+        assert_eq!(*slice.get(&Idx::Coord(vec![])).unwrap(), 42);
+    }
+
+    #[test]
+    fn test_cube_slice_mut_chain() {
+        let mut tensor = make_tensor(vec![
+            1, 2,
+            4, 5,
+            6, 7,
+            8, 9
+        ], vec![2, 2, 2]);
+        let mut depth_view = tensor.slice_mut(0, 1).unwrap(); // shape [2,2]
+        assert_eq!(depth_view.shape(), vec![2, 2]);
+        let mut row_view = depth_view.slice_mut(0, 1).unwrap(); // shape [2]
+        assert_eq!(row_view.shape(), vec![2]);
+        *row_view.get_mut(&Idx::At(0)).unwrap() = 800; // maps to original [1,1,0]
+        assert_eq!(tensor[vec![1, 1, 0]], 800);
+        assert_eq!(tensor[vec![1, 1, 1]], 9);
     }
 }
