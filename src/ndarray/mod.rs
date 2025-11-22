@@ -1,4 +1,4 @@
-use crate::{ndarray::tensor::TensorError};
+use crate::ndarray::tensor::{TensorError, ViewableTensor};
 
 pub mod tensor;
 
@@ -89,7 +89,7 @@ pub(crate) fn shape_to_stride(shape: &Shape) -> Stride {
 
 #[cfg(test)]
 mod tests {
-    use crate::ndarray::{Shape, Stride, TensorOwned, tensor::{Idx, Tensor, TensorError, TensorMut}};
+    use crate::ndarray::{Shape, Stride, TensorOwned, tensor::{Idx, Tensor, TensorError, TensorMut, ViewableTensor, ViewableTensorMut}};
 
     fn make_tensor<T>(buf: Vec<T>, shape: Shape) -> TensorOwned<T> {
         TensorOwned::from_buf(buf, shape).unwrap()
@@ -322,6 +322,82 @@ mod tests {
         // modify
         *tensor.get_mut(&Idx::Coord(vec![1, 0, 0])).unwrap() = 67;
         assert_eq!(*index_tensor(Idx::Coord(vec![1, 0, 0]), &tensor).unwrap(), 67);
+    }
+
+    #[test]
+    fn test_view_as_owned_success() {
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        let reshaped = tensor.view_as(vec![3, 2]).unwrap();
+        assert_eq!(reshaped.shape(), vec![3, 2]);
+        assert_eq!(reshaped.stride(), vec![2, 1]);
+        // Row-major sequence preserved
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 0]), &reshaped).unwrap(), 1);
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 1]), &reshaped).unwrap(), 2);
+        assert_eq!(*index_tensor(Idx::Coord(vec![1, 0]), &reshaped).unwrap(), 3);
+        assert_eq!(*index_tensor(Idx::Coord(vec![1, 1]), &reshaped).unwrap(), 4);
+        assert_eq!(*index_tensor(Idx::Coord(vec![2, 0]), &reshaped).unwrap(), 5);
+        assert_eq!(*index_tensor(Idx::Coord(vec![2, 1]), &reshaped).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_view_as_owned_error() {
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        assert!(matches!(tensor.view_as(vec![4, 2]), Err(TensorError::InvalidShape)));
+    }
+
+    #[test]
+    fn test_view_as_slice_success() {
+        let buf = vec![
+            1, 2, 3, 
+            4, 5, 6
+        ];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        let slice = tensor.slice(0, 1).unwrap(); // shape [3]
+        assert_eq!(slice.shape(), vec![3]);
+        let reshaped = slice.view_as(vec![1, 3]).unwrap();
+        assert_eq!(reshaped.shape(), vec![1, 3]);
+        assert_eq!(reshaped.stride(), vec![3, 1]);
+        // Values should correspond to original slice elements 4,5,6
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 0]), &reshaped).unwrap(), 4);
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 1]), &reshaped).unwrap(), 5);
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 2]), &reshaped).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_view_as_mut_view_modify() {
+        let buf = vec![1, 2, 3, 4];
+        let shape = vec![2, 2];
+        let mut tensor = make_tensor(buf, shape);
+        let mut view_mut = tensor.view_mut(); // shape [2,2]
+        // Modify before reshaping to avoid borrow conflicts
+        *view_mut.get_mut(&Idx::Coord(vec![1, 0])).unwrap() = 40; // coordinate [1,0] maps to linear index 2
+        let reshaped = view_mut.view_as(vec![4]).unwrap(); // reshape to flat vector
+        assert_eq!(reshaped.shape(), vec![4]);
+        assert_eq!(reshaped.stride(), vec![1]);
+        // Check reshaped view sees update at linear index 2
+        assert_eq!(*index_tensor(Idx::At(2), &reshaped).unwrap(), 40);
+    }
+
+    #[test]
+    fn test_view_as_scalar() {
+        let tensor = TensorOwned::scalar(99); // shape []
+        let view1 = tensor.view();
+        assert_eq!(view1.shape(), vec![]);
+        let reshaped = view1.view_as(vec![1]).unwrap();
+        assert_eq!(reshaped.shape(), vec![1]);
+        assert_eq!(reshaped.stride(), vec![1]);
+        assert_eq!(*index_tensor(Idx::At(0), &reshaped).unwrap(), 99);
+
+        // view as [1, 1, 1]
+
+        let r2 = reshaped.view_as(vec![1, 1, 1]).unwrap();
+        assert_eq!(*index_tensor(Idx::Coord(vec![0, 0, 0]), &r2).unwrap(), 99);
+
     }
 
     fn index_tensor<'a, T: Clone + Eq + std::fmt::Debug>(index: Idx, tensor: &'a impl Tensor<T>) -> Result<&'a T, TensorError> {
