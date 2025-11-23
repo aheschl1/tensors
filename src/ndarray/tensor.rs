@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use crate::ndarray::{Dim, Shape, Stride, TensorOwned, TensorView, TensorViewBase, TensorViewMut, idx::Idx, TensorMeta};
+use crate::ndarray::{Dim, Shape, Stride, Tensor, TensorView, TensorViewBase, TensorViewMut, idx::Idx, MetaTensor};
 
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -23,13 +23,13 @@ pub trait AsViewMut<T> : AsView<T> {
     fn view_mut(&mut self) -> TensorViewMut<'_, T>;
 }
 
-impl<T> AsView<T> for TensorOwned<T> {
+impl<T> AsView<T> for Tensor<T> {
     fn view(&self) -> TensorView<'_, T> {
         TensorView::from_parts(self.raw.as_ref(), self.meta.clone())
     }
 }
 
-impl<T> AsViewMut<T> for TensorOwned<T> {
+impl<T> AsViewMut<T> for Tensor<T> {
     fn view_mut<'a>(&'a mut self) -> TensorViewMut<'a, T> {
         TensorViewMut::from_parts(self.raw.as_mut(), self.meta.clone())
     }
@@ -50,7 +50,7 @@ impl<T> AsViewMut<T> for TensorViewMut<'_, T> {
 }
 
 
-pub trait Tensor<T>: Sized {
+pub trait TensorAccess<T>: Sized {
     /// Get element at given index
     fn get(&self, idx: &Idx) -> Result<&T, TensorError>;
 
@@ -61,7 +61,7 @@ pub trait Tensor<T>: Sized {
     fn slice<'a>(&'a self, dim: Dim, idx: Dim) -> Result<TensorView<'a, T>, TensorError> where Self: Sized;
 }
 
-pub trait TensorMut<T>: Tensor<T> {
+pub trait TensorMut<T>: TensorAccess<T> {
     /// Get mutable element at given index
     fn get_mut(&mut self, idx: &Idx) -> Result<&mut T, TensorError>;
     /// Slice mutable tensor to get a mutable view
@@ -74,7 +74,7 @@ pub trait TensorMut<T>: Tensor<T> {
     }
 }
 
-impl<T, B> Tensor<T> for TensorViewBase<'_, T, B>
+impl<T, B> TensorAccess<T> for TensorViewBase<'_, T, B>
 where B: AsRef<[T]>
 {
     /// Returns a reference to the element at a logical index, converting
@@ -103,7 +103,7 @@ where B: AsRef<[T]>
             idx
         )?;
         
-        let v = TensorView::from_parts(self.raw.as_ref(), TensorMeta::new(new_shape, new_stride, offset));
+        let v = TensorView::from_parts(self.raw.as_ref(), MetaTensor::new(new_shape, new_stride, offset));
         Ok(v)
     }
 }
@@ -131,7 +131,7 @@ impl<T> TensorMut<T> for TensorViewMut<'_, T>
         let (new_shape, new_stride, offset) =
             compute_sliced_parameters(self.meta.shape(), self.meta.stride(), &self.meta.offset(), dim, idx)?;
     
-        Ok(TensorViewMut::from_parts(self.raw, TensorMeta::new(new_shape, new_stride, offset)))
+        Ok(TensorViewMut::from_parts(self.raw, MetaTensor::new(new_shape, new_stride, offset)))
     }
 
 }

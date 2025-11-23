@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::ndarray::{shape_to_stride, Shape, TensorMeta};
+use crate::ndarray::{shape_to_stride, Shape, MetaTensor};
 use crate::ndarray::tensor::TensorError;
 
 /// An owned, contiguous tensor stored in row-major order.
@@ -9,9 +9,9 @@ use crate::ndarray::tensor::TensorError;
 /// in `meta` is expected to be zero for owned tensors created via
 /// `from_buf`/`row`/`column`/`scalar`.
 #[derive(Debug, PartialEq, Eq)]
-pub struct TensorOwned<T: Sized> {
+pub struct Tensor<T: Sized> {
     pub(crate) raw: Box<[T]>, // row major order
-    pub(crate) meta: TensorMeta,
+    pub(crate) meta: MetaTensor,
 }
 
 /// A non-owning view over tensor data with explicit layout metadata.
@@ -24,7 +24,7 @@ where
     B: AsRef<[T]> + 'a,
 {
     pub(crate) raw: B,
-    pub(crate) meta: TensorMeta,
+    pub(crate) meta: MetaTensor,
     pub(crate) _l: PhantomData<&'a ()>,
     pub(crate) _t: PhantomData<T>,
 }
@@ -35,7 +35,7 @@ where
 {
     /// Builds a tensor view from raw storage and metadata. No copying occurs;
     /// caller guarantees that `meta` correctly describes the layout within `raw`.
-    pub(crate) fn from_parts(raw: B, meta: TensorMeta) -> Self {
+    pub(crate) fn from_parts(raw: B, meta: MetaTensor) -> Self {
         Self {
             raw,
             meta,
@@ -56,7 +56,7 @@ where
         match new_size.cmp(&old_size) {
             std::cmp::Ordering::Equal => {
                 let stride = shape_to_stride(&shape);
-                let meta = TensorMeta::new(shape, stride, self.meta.offset());
+                let meta = MetaTensor::new(shape, stride, self.meta.offset());
                 let tensor = Self::from_parts(self.raw, meta);
                 Ok(tensor)
             }
@@ -68,7 +68,7 @@ where
 pub type TensorView<'a, T> = TensorViewBase<'a, T, &'a [T]>;
 pub type TensorViewMut<'a, T> = TensorViewBase<'a, T, &'a mut [T]>;
 
-impl<T: Sized> TensorOwned<T> {
+impl<T: Sized> Tensor<T> {
     /// Constructs a tensor from a contiguous buffer in row-major order and a
     /// given shape. Validates that `shape` size equals `raw.len()`.
     ///
@@ -82,7 +82,7 @@ impl<T: Sized> TensorOwned<T> {
         let stride = shape_to_stride(&shape);
         Ok(Self {
             raw,
-            meta: TensorMeta::new(shape, stride, 0),
+            meta: MetaTensor::new(shape, stride, 0),
         })
     }
 

@@ -4,16 +4,16 @@ pub mod meta;
 pub mod tensor;
 pub mod idx;
 
-pub use meta::{Dim, Shape, Stride, TensorMeta, TensorMetaView, shape_to_stride};
-pub use primitives::{TensorOwned, TensorViewBase, TensorView, TensorViewMut};
+pub use meta::{Dim, Shape, Stride, MetaTensor, MetaTensorView, shape_to_stride};
+pub use primitives::{Tensor, TensorViewBase, TensorView, TensorViewMut};
 
 
 #[cfg(test)]
 mod tests {
-    use crate::ndarray::{Shape, Stride, TensorOwned, TensorMeta, idx::Idx, TensorMetaView, tensor::{AsView, AsViewMut, Tensor, TensorError, TensorMut}};
+    use crate::ndarray::{Shape, Stride, Tensor, MetaTensor, idx::Idx, MetaTensorView, tensor::{AsView, AsViewMut, TensorAccess, TensorError, TensorMut}};
 
-    fn make_tensor<T>(buf: Vec<T>, shape: Shape) -> TensorOwned<T> {
-        TensorOwned::from_buf(buf, shape).unwrap()
+    fn make_tensor<T>(buf: Vec<T>, shape: Shape) -> Tensor<T> {
+        Tensor::from_buf(buf, shape).unwrap()
     }
 
     #[test]
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_column() {
-    let tensor = TensorOwned::column(vec![1, 2, 3]);
+    let tensor = Tensor::column(vec![1, 2, 3]);
     assert_eq!(*tensor.shape(), vec![3]);
         assert_eq!(*index_tensor(Idx::At(0), &tensor.view()).unwrap(), 1);
         assert_eq!(*index_tensor(Idx::At(1), &tensor.view()).unwrap(), 2);
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_row() {
-    let tensor = TensorOwned::row(vec![1, 2, 3]);
+    let tensor = Tensor::row(vec![1, 2, 3]);
     assert_eq!(*tensor.shape(), vec![1, 3]);
         assert_eq!(*index_tensor(Idx::Coord(&[0, 0]), &tensor.view()).unwrap(), 1);
         assert_eq!(*index_tensor(Idx::Coord(&[0, 1]), &tensor.view()).unwrap(), 2);
@@ -178,7 +178,7 @@ mod tests {
 
         assert_eq!(*index_tensor(Idx::Item, &tensor.view()).unwrap(), 42);
         assert!(tensor.is_scalar());
-        assert_eq!(TensorOwned::scalar(42), tensor);
+        assert_eq!(Tensor::scalar(42), tensor);
     }
 
     #[test]
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_view_as_scalar() {
-        let tensor = TensorOwned::scalar(99); // shape []
+        let tensor = Tensor::scalar(99); // shape []
         let view1 = tensor.view();
         assert_eq!(*view1.shape(), vec![]);
         let reshaped = view1.view_as(vec![1]).unwrap();
@@ -316,7 +316,7 @@ mod tests {
 
     }
 
-    fn index_tensor<'a, T: Clone + Eq + std::fmt::Debug>(index: Idx<'a>, tensor: &'a impl Tensor<T>) -> Result<&'a T, TensorError> {
+    fn index_tensor<'a, T: Clone + Eq + std::fmt::Debug>(index: Idx<'a>, tensor: &'a impl TensorAccess<T>) -> Result<&'a T, TensorError> {
         let r: Result<&T, TensorError> = tensor.get(&index);
         let a = match r.as_ref() {
             Ok(v) => Ok(*v),
@@ -384,7 +384,7 @@ mod tests {
         let buf = vec![1, 2, 3, 4];
         let shape = vec![2, 3];
         assert!(matches!(
-            TensorOwned::from_buf(buf, shape),
+            Tensor::from_buf(buf, shape),
             Err(TensorError::InvalidShape)
         ));
     }
@@ -486,9 +486,9 @@ mod tests {
 
     #[test]
     fn test_is_row_and_is_column() {
-        let row = TensorOwned::row(vec![1, 2, 3]);
-        let col = TensorOwned::column(vec![1, 2, 3]);
-        let scalar = TensorOwned::scalar(10);
+        let row = Tensor::row(vec![1, 2, 3]);
+        let col = Tensor::column(vec![1, 2, 3]);
+        let scalar = Tensor::scalar(10);
         assert!(row.is_row());
         assert!(!row.is_column());
         assert!(!col.is_row());
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn test_slice_scalar_error() {
-        let scalar = TensorOwned::scalar(5);
+        let scalar = Tensor::scalar(5);
         assert!(matches!(scalar.view().slice(0, 0), Err(TensorError::InvalidDim)));
     }
 
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn test_from_buf_empty_shape_error() {
-        assert!(matches!(TensorOwned::from_buf(Vec::<i32>::new(), vec![]), Err(TensorError::InvalidShape)));
+        assert!(matches!(Tensor::from_buf(Vec::<i32>::new(), vec![]), Err(TensorError::InvalidShape)));
     }
 
     #[test]
@@ -576,7 +576,7 @@ mod tests {
     // --- Additional metadata coverage tests ---
     #[test]
     fn test_meta_dims_and_dim() {
-        let scalar = TensorOwned::scalar(10);
+        let scalar = Tensor::scalar(10);
         assert_eq!(scalar.dims(), 0);
 
         let vec = make_tensor(vec![1, 2, 3], vec![3]);
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_meta_size() {
-        let scalar = TensorOwned::scalar(42);
+        let scalar = Tensor::scalar(42);
         assert_eq!(scalar.size(), 1);
 
         let vec = make_tensor(vec![1, 2, 3, 4], vec![4]);
@@ -667,7 +667,7 @@ mod tests {
         // contiguous meta
         let shape = vec![2, 3];
         let stride = super::shape_to_stride(&shape);
-        let meta = TensorMeta::new(shape.clone(), stride.clone(), 0);
+        let meta = MetaTensor::new(shape.clone(), stride.clone(), 0);
         assert_eq!(meta.shape(), &shape);
         assert_eq!(meta.stride(), &stride);
         assert_eq!(meta.offset(), 0);
@@ -681,7 +681,7 @@ mod tests {
         assert!(meta.is_contiguous());
 
         // non-contiguous meta (e.g., a column-like view of a [2,3] matrix)
-        let nc_meta = TensorMeta::new(vec![2], vec![3], 0);
+        let nc_meta = MetaTensor::new(vec![2], vec![3], 0);
         assert_eq!(nc_meta.dims(), 1);
         assert_eq!(nc_meta.size(), 2);
         assert!(!nc_meta.is_contiguous());

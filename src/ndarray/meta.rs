@@ -1,17 +1,17 @@
-use super::primitives::{TensorOwned, TensorViewBase};
+use super::primitives::{Tensor, TensorViewBase};
 
 pub type Dim = usize;
 pub type Stride = Vec<usize>;
 pub type Shape = Vec<Dim>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct TensorMeta {
+pub struct MetaTensor {
     shape: Shape,
     stride: Stride,
     offset: usize,
 }
 
-impl TensorMeta {
+impl MetaTensor {
     /// Creates tensor metadata with explicit shape, stride and offset.
     pub fn new(shape: Shape, stride: Stride, offset: usize) -> Self {
         Self { shape, stride, offset }
@@ -72,14 +72,13 @@ pub(crate) fn is_contiguous_relaxed(shape: &Shape, stride: &Stride) -> bool {
 }
 
 /// Read-only metadata view for tensors and views.
-pub trait TensorMetaView {
+pub trait MetaTensorView {
     /// Borrow the shape vector.
     fn shape(&self) -> &Shape;
     /// Borrow the stride vector.
     fn stride(&self) -> &Stride;
     /// Starting offset (in elements) into the underlying buffer.
     fn offset(&self) -> usize;
-
     /// Number of dimensions (rank).
     fn dims(&self) -> usize { self.shape().len() }
     /// Size of one dimension by index.
@@ -97,19 +96,19 @@ pub trait TensorMetaView {
     fn is_contiguous(&self) -> bool { is_contiguous_relaxed(self.shape(), self.stride()) }
 }
 
-impl TensorMetaView for TensorMeta {
+impl MetaTensorView for MetaTensor {
     fn shape(&self) -> &Shape { self.shape() }
     fn stride(&self) -> &Stride { self.stride() }
     fn offset(&self) -> usize { self.offset() }
 }
 
-impl<T> TensorMetaView for TensorOwned<T> {
+impl<T> MetaTensorView for Tensor<T> {
     fn shape(&self) -> &Shape { self.meta.shape() }
     fn stride(&self) -> &Stride { self.meta.stride() }
     fn offset(&self) -> usize { self.meta.offset() }
 }
 
-impl<T, B> TensorMetaView for TensorViewBase<'_, T, B>
+impl<T, B> MetaTensorView for TensorViewBase<'_, T, B>
 where
     B: AsRef<[T]>,
 {

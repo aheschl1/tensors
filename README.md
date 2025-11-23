@@ -1,110 +1,101 @@
-# tensors and such
+# tengine
 
-This crate provides a 0 dependency row-major N-dimensional tensor abstraction with owned and view types.
+Zero-dependency row‑major N‑dimensional tensor primitives for Rust.
 
-TODO:
+Side project status: APIs may change; scope intentionally small.
 
-- [ ] Slicing with ranges
-- [ ] Broadcasting elemtwise
-- [ ] Lin alg
-- [ ] accelerated backends
-- [ ] x86 SIMD
-- [ ] Nicer indexing syntax
+## Overview
+
+Minimal building blocks for dense, strided tensors:
+
+* Owned storage (`Tensor<T>`) with shape + stride metadata.
+* Zero‑copy immutable and mutable views (`TensorView<'a, T>`, `TensorViewMut<'a, T>`) using an element offset, shape and stride.
+* Safe indexing via the `Idx` enum (`Coord`, `At`, `Item`) plus `Index` / `IndexMut` operator for convenience.
+* O(1) slicing (`slice(dim, idx)`) producing a view with one fewer dimension.
+* Scalar / row / column helpers for ergonomic construction.
+
+The crate does not yet support ranged slicing, broadcasting, or linear algebra. Version `0.x` implies the surface may evolve.
+
+## Installation
+
+Add to `Cargo.toml`:
+
+```toml
+tengine = "0.1.0"
+```
+
+## Quick Start
+
+```rust
+use tengine::ndarray::{Tensor, idx::Idx, MetaTensorView, tensor::{TensorAccess, TensorMut}};
+
+// Matrix 2x3 (row-major):
+let m = Tensor::from_buf(vec![1,2,3,4,5,6], vec![2,3]).unwrap();
+assert_eq!(m.shape(), &[2,3]);
+
+// Indexing (panic on failure):
+assert_eq!(m[vec![0, 1]], 2);
+
+// Safe access via trait:
+let v = m.view();
+assert_eq!(*v.get(&Idx::Coord(&[1,2])).unwrap(), 6);
+
+// Slice first dimension (row 1): shape becomes [3]
+let row1 = v.slice(0, 1).unwrap();
+assert_eq!(row1.shape(), &[3]);
+assert_eq!(row1[vec![2]], 6);
+
+// Mutation through a mutable view:
+let mut m2 = Tensor::row(vec![10, 20, 30]);
+let mut mv = m2.view_mut();
+mv.set(&Idx::At(1), 99).unwrap();
+assert_eq!(m2[vec![0,1]], 99);
+```
 
 ## Core Types
 
-- `TensorOwned<T>`: Owns a contiguous buffer (`Box<[T]>`) with a `shape: Vec<usize>` and derived `stride: Vec<usize>`.
-- `TensorView<'a, T>` / `TensorViewMut<'a, T>`: Non-owning views (mutable or immutable) into an existing tensor slice; store an `offset`, `shape`, and `stride`.
-- Shapes are length-per-dimension in row-major order. Strides are element steps per dimension (last dim stride = 1).
+| Type | Purpose |
+|------|---------|
+| `Tensor<T>` | Owns a contiguous buffer with row‑major layout. |
+| `TensorView<'a, T>` / `TensorViewMut<'a, T>` | Borrowed immutable / mutable views; no allocation. |
+| `MetaTensor` | Shape / stride / offset metadata. |
+| `Idx<'a>` | Logical index (`Coord(&[usize])`, `At(usize)`, `Item`). |
+| `TensorAccess` / `TensorMut` | Traits for read / read+write indexing & slicing. |
 
-## Creating Tensors
+## Shapes & Strides
 
-```rust
-use tengine::ndarray::TensorOwned;
+* Shape: lengths per dimension (e.g. `[2, 3, 4]`).
+* Stride: element steps per dimension in row‑major order (last dim stride = 1). Computed with `shape_to_stride`.
+* Views adjust `offset` + remove a dimension when sliced.
 
-// Scalar (shape = [])
-let s = TensorOwned::scalar(99);
+## Error Handling
 
-// Column vector (shape = [3])
-let col = TensorOwned::column(vec![1, 2, 3]);
+`TensorError` variants:
 
-// Row vector (shape = [1, 3])
-let row = TensorOwned::row(vec![1, 2, 3]);
+* `InvalidShape` – buffer length mismatch or reshape size mismatch.
+* `IdxOutOfBounds` – coordinate exceeds dimension length.
+* `WrongDims` – index rank mismatch (including `Item` on non‑scalar).
+* `InvalidDim` – slice dimension out of range.
 
-// Matrix from buffer (shape = [2, 3])
-let m = TensorOwned::from_buf(vec![1,2,3,4,5,6].into_boxed_slice(), vec![2,3]).unwrap();
-```
+Indexing via `[]` unwraps internally and will panic on error; prefer `get`, `get_mut`, or `set` for fallible access.
 
-## Indexing
+## Slicing Semantics
 
-```rust
-assert_eq!(m[vec![0, 1]], 2); // row 0, col 1
-```
+`slice(dim, idx)` / `slice_mut(dim, idx)`:
 
-Programmatic access uses the `Idx` enum (`At`, `Coord`, `Item`) via `get` / `item`:
+* Removes dimension `dim` from shape & stride vectors.
+* Advances offset by `stride[dim] * idx`.
+* Produces a view (no copy); scalar result → empty shape `[]`.
 
-```rust
-use tengine::ndarray::tensor::{Idx, Tensor};
-let v = m.get(&Idx::Coord(vec![1, 2])).unwrap();
-```
+## TODO (Future Work)
 
-Invalid shapes or out-of-bounds coordinates return a `TensorError` (or panic via `[]`).
+[ ] Nicer syntax. macro time
+[ ] Slicing with ranges
+[ ] Elementwise broadcasting
+[ ] Basic linear algebra helpers
+[ ] Accelerated backends (GPU / parallel)
+[ ] x86 SIMD paths
+[ ] Nicer indexing syntax sugar
 
-## Mutation
-
-```rust
-use tengine::ndarray::tensor::TensorMut;
-let mut mm = m; // from earlier
-*mm.get_mut(&Idx::Coord(vec![1,2])).unwrap() = 42;
-assert_eq!(mm[vec![1,2]], 42);
-
-// Convenience with IndexMut
-mm[vec![0,0]] = 10;
-```
-
-`set(&Idx, value)` returns `Result<(), TensorError>` when you prefer error handling over panics.
-
-## Slicing Views
-
-`slice(dim, idx)` produces a view with one fewer dimension (selecting a fixed index along `dim`).
-
-```rust
-let row_view = mm.slice(0, 1).unwrap(); // shape [3]
-assert_eq!(row_view[vec![2]], 6);
-
-let mut row_view_mut = mm.slice_mut(0, 0).unwrap();
-row_view_mut[vec![1]] = 50; // reflects in original tensor
-assert_eq!(mm[vec![0,1]], 50);
-```
-
-Slicing a 1-D tensor to a scalar yields shape `[]`.
-
-## Reshaping Views
-
-`view_as(new_shape)` changes shape/stride if total element count matches.
-
-```rust
-let view = mm.view();            // shape [2,3]
-let flat = view.view_as(vec![6]).unwrap(); // shape [6], stride [1]
-assert_eq!(flat[vec![4]], 5);
-
-let reshaped = view.view_as(vec![3,2]).unwrap();
-assert_eq!(reshaped[vec![2,1]], 6);
-```
-
-Fails with `TensorError::InvalidShape` if element counts differ.
-
-## Scalars, Rows, Columns Helpers
-
-```rust
-assert!(TensorOwned::scalar(1).is_scalar());
-assert!(TensorOwned::row(vec![1,2,3]).is_row());
-assert!(TensorOwned::column(vec![1,2,3]).is_column());
-```
-
-## Error Summary
-
-- `InvalidShape`: Buffer length does not match requested shape or reshape mismatch.
-- `IdxOutOfBounds`: Coordinate exceeds dimension length.
-- `WrongDims`: Provided index rank mismatches tensor rank (including using `Item` on non-scalar).
-- `InvalidDim`: Slice dimension out of range.
+---
+Minimal and focused for experimentation; not production hardened.
