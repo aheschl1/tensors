@@ -1,6 +1,6 @@
-use std::{marker::PhantomData, ops::{Index, IndexMut}};
+use std::ops::{Index, IndexMut};
 
-use crate::ndarray::{Dim, Shape, Stride, TensorOwned, TensorView, TensorViewBase, TensorViewMut, idx::Idx};
+use crate::ndarray::{Dim, Shape, Stride, TensorOwned, TensorView, TensorViewBase, TensorViewMut, idx::Idx, shape_to_stride};
 
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -21,13 +21,13 @@ pub trait AsViewMut<T> : AsView<T> {
 
 impl<T> AsView<T> for TensorOwned<T> {
     fn view(&self) -> TensorView<'_, T> {
-        TensorView::from_parts(self.raw.as_ref(), self.shape.clone(), self.stride.clone(), 0)
+        TensorView::from_parts(self.raw.as_ref(), self.meta.shape.clone(), self.meta.stride.clone(), 0)
     }
 }
 
 impl<T> AsViewMut<T> for TensorOwned<T> {
     fn view_mut<'a>(&'a mut self) -> TensorViewMut<'a, T> {
-        TensorViewMut::from_parts(self.raw.as_mut(), self.shape.clone(), self.stride.clone(), 0)
+        TensorViewMut::from_parts(self.raw.as_mut(), self.meta.shape.clone(), self.meta.stride.clone(), 0)
     }
 }
 
@@ -80,6 +80,10 @@ pub trait Tensor<T>: Sized {
 
     fn is_column(&self) -> bool {
         self.shape().len() == 1
+    }
+
+    fn is_contiguous(&self) -> bool {
+        shape_to_stride(self.shape()) == *self.stride()
     }
 }
 pub trait TensorMut<T>: Tensor<T> {
@@ -182,7 +186,8 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
             }
         },
         Idx::At(i) => {
-            logical_to_buffer_idx(&Idx::At(*i), stride, offset)
+            // Single-dimensional index; only valid when there is exactly one dimension
+            logical_to_buffer_idx(&Idx::Coord(&[*i]), stride, offset)
         }
     }
 }

@@ -11,10 +11,62 @@ pub type Stride = Vec<usize>;
 pub type Shape = Vec<Dim>;
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct TensorMeta {
+    shape: Shape,
+    stride: Stride,
+    offset: usize,
+}
+
+impl TensorMeta {
+    pub fn new(shape: Shape, stride: Stride, offset: usize) -> Self {
+        Self{
+            shape,
+            stride,
+            offset,
+        }
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.stride.is_empty()
+    }
+
+    pub fn is_row(&self) -> bool {
+        self.shape.len() == 2 && self.shape[0] == 1
+    }
+
+    pub fn is_column(&self) -> bool {
+        self.shape.len() == 1
+    }
+
+    pub fn dims(&self) -> usize {
+        self.shape.len()
+    }
+    
+    pub fn size(&self) -> usize {
+        self.shape.iter().product()
+    }
+
+    pub fn is_contiguous(&self) -> bool {
+        shape_to_stride(&self.shape) == self.stride
+    }
+
+    pub fn shape(&self) -> &Shape {
+        &self.shape
+    }
+
+    pub fn stride(&self) -> &Stride {
+        &self.stride
+    }
+
+    pub fn dim(&self, dim: Dim) -> Dim {
+        self.shape[dim]
+    }
+
+}
+#[derive(Debug, PartialEq, Eq)]
 pub struct TensorOwned<T: Sized>{
     raw: Box<[T]>, // row major order
-    stride: Stride,
-    shape: Shape,
+    meta: TensorMeta,
 }
 
 pub struct TensorViewBase<'a, T, B> 
@@ -75,55 +127,37 @@ impl<T: Sized> TensorOwned<T> {
         if shape.iter().fold(1, |p, x| p*x) != raw.len() {
             return Err(TensorError::InvalidShape);
         }
+        let stride = shape_to_stride(&shape);
         Ok(Self{
             raw,
-            stride: shape_to_stride(&shape),
-            shape,
+            meta: TensorMeta::new(shape, stride, 0)
         })
     }
 
     pub fn scalar(value: T) -> Self {
-        Self{
-            raw: vec![value].into(),
-            stride: vec![],
-            shape: vec![],
-        }
+        Self::from_buf(vec![value], vec![]).unwrap()
     }
 
     pub fn column(column: impl Into<Box<[T]>>) -> Self {
         let column = column.into();
-        Self{
-            shape: vec![column.len()],
-            raw: column,
-            stride: vec![1],
-        }
+        let shape = vec![column.len()];
+        Self::from_buf(column, shape).unwrap()
     }
 
     pub fn row(row: impl Into<Box<[T]>>) -> Self {
         let row = row.into();
-        Self{
-            shape: vec![1, row.len()],
-            stride: vec![row.len(), 1],
-            raw: row,
-        }
-    }
-
-    pub fn empty() -> TensorOwned<()> {
-        TensorOwned::<()>{
-            raw: vec![].into(),
-            stride: vec![],
-            shape: vec![],
-        }
+        let shape = vec![1, row.len()];
+        Self::from_buf(row, shape).unwrap()
     }
 
     pub fn is_scalar(&self) -> bool {
-        self.stride.is_empty()
+        self.meta.is_scalar()
     }
     pub fn is_row(&self) -> bool {
-        self.shape.len() == 2 && self.shape[0] == 1
+        self.meta.is_row()
     }
     pub fn is_column(&self) -> bool {
-        self.shape.len() == 1
+        self.meta.is_column()
     }
 }
 
@@ -282,7 +316,7 @@ mod tests {
     #[test]
     fn test_column() {
         let tensor = TensorOwned::column(vec![1, 2, 3]);
-        assert_eq!(*tensor.shape, vec![3]);
+        assert_eq!(*tensor.meta.shape, vec![3]);
         assert_eq!(*index_tensor(Idx::At(0), &tensor.view()).unwrap(), 1);
         assert_eq!(*index_tensor(Idx::At(1), &tensor.view()).unwrap(), 2);
         assert_eq!(*index_tensor(Idx::At(2), &tensor.view()).unwrap(), 3);
@@ -291,20 +325,12 @@ mod tests {
     #[test]
     fn test_row() {
         let tensor = TensorOwned::row(vec![1, 2, 3]);
-        assert_eq!(*tensor.shape, vec![1, 3]);
+        assert_eq!(*tensor.meta.shape, vec![1, 3]);
         assert_eq!(*index_tensor(Idx::Coord(&[0, 0]), &tensor.view()).unwrap(), 1);
         assert_eq!(*index_tensor(Idx::Coord(&[0, 1]), &tensor.view()).unwrap(), 2);
         assert_eq!(*index_tensor(Idx::Coord(&[0, 2]), &tensor.view()).unwrap(), 3);
 
         assert_eq!(tensor.view()[vec![0, 1]], 2);
-    }
-
-    #[test]
-    fn test_empty() {
-        let tensor = TensorOwned::<()>::empty();
-        assert_eq!(*tensor.shape, vec![]);
-        assert!(tensor.raw.is_empty());
-        assert!(tensor.stride.is_empty());
     }
 
     #[test]
@@ -461,7 +487,7 @@ mod tests {
         };
         let b = match &index {
             Idx::At(i) => tensor.get(&Idx::Coord(&[*i])),
-            Idx::Coord(idx) => tensor.get(&Idx::Coord(idx.clone())),
+            Idx::Coord(idx) => tensor.get(&Idx::Coord(idx)),
             Idx::Item => tensor.item(),
         };
         assert_eq!(a, b);
