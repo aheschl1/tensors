@@ -143,7 +143,7 @@ where
     pub fn from_buf(raw: impl Into<Box<[T]>>, shape: Shape) -> Result<Self, TensorError> {
         let backend = B::new();
         let buffer = backend.from_slice(raw.into())?;
-        if shape.iter().fold(1, |p, x| p * x) != backend.len(&buffer) {
+        if shape.iter().product::<usize>() != backend.len(&buffer) {
             return Err(TensorError::InvalidShape);
         }
         let stride = shape_to_stride(&shape);

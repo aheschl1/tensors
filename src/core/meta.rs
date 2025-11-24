@@ -1,6 +1,6 @@
 use crate::{backend::Backend, core::{TensorViewMut, primitives::{TensorBase, TensorValue}}};
 
-use super::primitives::{CpuTensor, TensorView};
+use super::primitives::TensorView;
 
 pub type Dim = usize;
 pub type Stride = Vec<usize>;
@@ -58,7 +58,7 @@ pub fn shape_to_stride(shape: &Shape) -> Stride {
 /// ignores singleton dimensions and accepts empty shapes.
 pub(crate) fn is_contiguous_relaxed(shape: &Shape, stride: &Stride) -> bool {
     if shape.is_empty() { return true; }
-    if shape.iter().any(|&d| d == 0) { return true; }
+    if shape.contains(&0) { return true; }
     if shape.len() != stride.len() { return false; }
 
     let mut expected = 1usize;

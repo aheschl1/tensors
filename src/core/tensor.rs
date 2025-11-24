@@ -1,4 +1,3 @@
-use std::ops::{Index, IndexMut};
 
 use crate::{backend::{Backend, cpu::Cpu}, core::{CpuTensor, CpuTensorView, Dim, MetaTensor, Shape, Stride, TensorView, TensorViewMut, idx::Idx, primitives::{CpuTensorViewMut, TensorValue}}};
 
@@ -49,7 +48,7 @@ impl<T: TensorValue, B: Backend<T>> AsView<T, B> for TensorView<'_, T, B>
     fn view<'a>(&'a self) -> TensorView<'a, T, B> {
         TensorView::from_parts(
             self.raw, 
-            &self.backend, 
+            self.backend, 
             self.meta.clone()
         )
     }
@@ -207,7 +206,7 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
     match idx {
         Idx::Coord(idx) => {
             if idx.len() != stride.len() {
-                return Err(TensorError::WrongDims)
+                Err(TensorError::WrongDims)
             }else{
                 Ok(idx
                     .iter()

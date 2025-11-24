@@ -21,9 +21,9 @@ impl<T: Copy + Default> Backend<T> for Cpu {
     }
 
     fn read(&self, buf: &Self::Buf, offset: usize) -> Result<T, TensorError> {
-        Ok(buf.get(offset).ok_or(
+        Ok(*buf.get(offset).ok_or(
             TensorError::IdxOutOfBounds
-        )?.clone())
+        )?)
     }
 
     fn write(&self, buf: &mut Self::Buf, offset: usize, value: T) -> Result<(), TensorError> {
