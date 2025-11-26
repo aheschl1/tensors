@@ -1,14 +1,30 @@
 
 use crate::{backend::{Backend, cpu::Cpu}, core::{CpuTensor, CpuTensorView, Dim, MetaTensor, Shape, Stride, TensorView, TensorViewMut, idx::Idx, primitives::{CpuTensorViewMut, TensorValue}}};
+use thiserror::Error;
 
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum TensorError {
+    #[error("index out of bounds")]
     IdxOutOfBounds,
+
+    #[error("wrong number of dimensions")]
     WrongDims,
+
+    #[error("invalid tensor shape")]
     InvalidShape,
+
+    #[error("invalid dimension")]
     InvalidDim,
+
+    #[error("size mismatch between tensors")]
     SizeMismatch,
+
+    #[error("backend error: {0}")]
+    BackendError(String),
+
+    #[cfg(feature = "cuda")]
+    #[error("cuda error: {0}")]
+    CudaError(String),
 }
 
 pub trait AsView<T: TensorValue, B: Backend<T>> {
@@ -36,6 +52,28 @@ impl<T: TensorValue> AsView<T, Cpu> for CpuTensor<T> {
 impl<T: TensorValue> AsViewMut<T, Cpu> for CpuTensor<T> {
     fn view_mut<'a>(&'a mut self) -> CpuTensorViewMut<'a, T> {
         CpuTensorViewMut::from_parts(
+            &mut self.raw, 
+            &self.backend, 
+            self.meta.clone()
+        )
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<T: TensorValue + cudarc::driver::DeviceRepr> AsView<T, crate::backend::cuda::CudaBackend> for crate::core::primitives::CudaTensor<T> {
+    fn view(&self) -> crate::core::primitives::CudaTensorView<'_, T> {
+        crate::core::primitives::CudaTensorView::from_parts(
+            &self.raw, 
+            &self.backend, 
+            self.meta.clone()
+        )
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl<T: TensorValue + cudarc::driver::DeviceRepr> AsViewMut<T, crate::backend::cuda::CudaBackend> for crate::core::primitives::CudaTensor<T> {
+    fn view_mut<'a>(&'a mut self) -> crate::core::primitives::CudaTensorViewMut<'a, T> {
+        crate::core::primitives::CudaTensorViewMut::from_parts(
             &mut self.raw, 
             &self.backend, 
             self.meta.clone()

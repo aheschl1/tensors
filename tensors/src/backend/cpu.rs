@@ -1,9 +1,9 @@
-use crate::{backend::Backend, core::tensor::TensorError};
+use crate::{backend::Backend, core::{primitives::TensorValue, tensor::TensorError}};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Cpu;
 
-impl<T: Copy + Default> Backend<T> for Cpu {
+impl<T: TensorValue> Backend<T> for Cpu {
     type Buf = Box<[T]>;
 
 
@@ -46,5 +46,16 @@ impl<T: Copy + Default> Backend<T> for Cpu {
     
     fn new() -> Self {
         Self
+    }
+    
+    fn apply_each<F>(&self, buf: &mut Self::Buf, f: F, offsets: impl Iterator<Item = usize>) -> Result<(), TensorError>
+    where
+        F: Fn(T) -> T {
+        for offset in offsets {
+            let value = self.read(buf, offset)?;
+            let new_value = f(value);
+            self.write(buf, offset, new_value)?;
+        }
+        Ok(())
     }
 }

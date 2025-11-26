@@ -23,6 +23,9 @@ pub struct TensorBase<B: Backend<T>, T: TensorValue> {
 /// `from_buf`/`row`/`column`/`scalar`.
 pub type CpuTensor<T> = TensorBase<Cpu, T>;
 
+#[cfg(feature = "cuda")]
+pub type CudaTensor<T> = TensorBase<crate::backend::cuda::CudaBackend, T>;
+
 /// A non-owning view over tensor data with explicit layout metadata.
 ///
 /// The `B` parameter abstracts over borrowed storage (e.g., `&[T]` or
@@ -130,6 +133,10 @@ where
 
 pub type CpuTensorView<'a, T> = TensorView<'a, T, Cpu>;
 pub type CpuTensorViewMut<'a, T> = TensorViewMut<'a, T, Cpu>;
+#[cfg(feature = "cuda")]
+pub type CudaTensorView<'a, T> = TensorView<'a, T, crate::backend::cuda::CudaBackend>;
+#[cfg(feature = "cuda")]
+pub type CudaTensorViewMut<'a, T> = TensorViewMut<'a, T, crate::backend::cuda::CudaBackend>;
 
 impl<B, T: TensorValue> TensorBase<B, T> 
 where 
