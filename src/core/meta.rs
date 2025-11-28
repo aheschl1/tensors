@@ -1,10 +1,16 @@
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, value::TensorValue, TensorViewMut}};
+use crate::{backend::Backend, core::{primitives::TensorBase, value::TensorValue, TensorViewMut}};
 
 use super::primitives::TensorView;
 
 pub type Dim = usize;
 pub type Stride = Vec<usize>;
 pub type Shape = Vec<Dim>;
+
+pub enum MemRegion {
+    Contiguous { start: usize, len: usize },
+    Strided { start: usize, stride: usize, len: usize },
+    Scattered { offsets: Vec<usize> },
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MetaTensor {
@@ -40,10 +46,48 @@ impl MetaTensor {
     pub fn offset(&self) -> usize { self.offset }
     /// Returns the size of a single dimension by index.
     pub fn dim(&self, dim: Dim) -> Dim { self.shape[dim] }
-    /// returns all offsets in the underlying buffer for this tensor/view.
-    pub fn offsets(&self) -> Vec<usize> {
-        self.iter_offsets().collect::<Vec<usize>>()
+    pub fn rank(&self) -> usize { self.shape.len() }
+    /// Returns all contiguous memory ranges (in elements) that cover this tensor/view.
+    pub fn mem_regions(&self) -> Vec<MemRegion> {
+        if self.size() == 0 {
+            return vec![];
+        }
+
+        if self.is_contiguous() {
+            return vec![MemRegion::Contiguous {
+                start: self.offset,
+                len: self.size(),
+            }];
+        }
+
+        let mut non_singleton_dims = Vec::new();
+        for (i, &dim) in self.shape.iter().enumerate() {
+            if dim != 1 {
+                non_singleton_dims.push((i, dim, self.stride[i]));
+            }
+        }
+
+        // case of a single non-singleton dimension
+        // for example, a row or column vector
+        // basically a row/column vector with arbitrary n dimensions
+        if non_singleton_dims.len() == 1 {
+            let (_, dim_size, dim_stride) = non_singleton_dims[0];
+            return vec![MemRegion::Strided {
+                start: self.offset,
+                stride: dim_stride,
+                len: dim_size,
+            }];
+        }
+
+        // find a contiguous inner dimension
+        if let Some(inner) = innermost_contiguous_dim(self) {
+            return regions_by_inner_dim(self.clone(), inner);
+        }
+
+        return vec![MemRegion::Scattered { offsets: self.iter_offsets().collect() }]; 
     }
+
+    /// Returns an iterator over all offsets in the underlying buffer for this tensor/view.
     pub fn iter_offsets(&self) -> impl Iterator<Item = usize> + '_ {
         let shape = self.shape.clone();
         let stride = self.stride.clone();
@@ -143,64 +187,163 @@ pub(crate) fn is_contiguous_relaxed(shape: &Shape, stride: &Stride) -> bool {
 
 /// Read-only metadata view for tensors and views.
 pub trait MetaTensorView {
+
+    fn meta(&self) -> &MetaTensor;
     /// Borrow the shape vector.
-    fn shape(&self) -> &Shape;
+    fn shape(&self) -> &Shape { self.meta().shape() }
     /// Borrow the stride vector.
-    fn stride(&self) -> &Stride;
+    fn stride(&self) -> &Stride { self.meta().stride() }
     /// Starting offset (in elements) into the underlying buffer.
-    fn offset(&self) -> usize;
+    fn offset(&self) -> usize { self.meta().offset() }
     /// Number of dimensions (rank).
-    fn dims(&self) -> usize { self.shape().len() }
+    fn dims(&self) -> usize { self.meta().dims() }
     /// Size of one dimension by index.
-    fn dim(&self, dim: Dim) -> Dim { self.shape()[dim] }
+    fn dim(&self, dim: Dim) -> Dim { self.meta().dim(dim) }
     /// Total number of elements (product of all dimensions).
-    fn size(&self) -> usize { self.shape().iter().product() }
+    fn size(&self) -> usize { self.meta().size() }
     /// True for rank-0 (scalar) tensors.
-    fn is_scalar(&self) -> bool { self.stride().is_empty() }
+    fn is_scalar(&self) -> bool { self.meta().is_scalar() }
     /// True for 1xN row tensors.
-    fn is_row(&self) -> bool { self.shape().len() == 2 && self.shape()[0] == 1 }
+    fn is_row(&self) -> bool { self.meta().is_row() }
     /// True for 1-D column tensors.
-    fn is_column(&self) -> bool { self.shape().len() == 1 }
+    fn is_column(&self) -> bool { self.meta().is_column() }
+
+    fn rank(&self) -> usize { self.meta().rank() }
     /// Whether the layout is contiguous in row-major order under relaxed rules
     /// (ignoring singleton dimensions).
-    fn is_contiguous(&self) -> bool { is_contiguous_relaxed(self.shape(), self.stride()) }
-    fn iter_offsets(&self) -> impl Iterator<Item = usize> + '_ {
-        let shape = self.shape().clone();
-        let stride = self.stride().clone();
-        let offset = self.offset();
-        TensorOffsetIterator::new(shape, stride, offset)
-    }
+    fn is_contiguous(&self) -> bool { self.meta().is_contiguous() }
+
+    fn iter_offsets(&self) -> impl Iterator<Item = usize> + '_ { self.meta().iter_offsets() }
+
+    fn mem_regions(&self) -> Vec<MemRegion> { self.meta().mem_regions() }
 }
 
 impl MetaTensorView for MetaTensor {
-    fn shape(&self) -> &Shape { self.shape() }
-    fn stride(&self) -> &Stride { self.stride() }
-    fn offset(&self) -> usize { self.offset() }
+    fn meta(&self) -> &MetaTensor {
+        &self
+    }
 }
 
 impl<B, T: TensorValue> MetaTensorView for TensorBase<B, T> 
 where
     B: Backend<T>,
 {
-    fn shape(&self) -> &Shape { self.meta.shape() }
-    fn stride(&self) -> &Stride { self.meta.stride() }
-    fn offset(&self) -> usize { self.meta.offset() }
+    fn meta(&self) -> &MetaTensor {
+        &self.meta
+    }
 }
 
 impl<T: TensorValue, B> MetaTensorView for TensorView<'_, T, B>
 where
     B: Backend<T>,
 {
-    fn shape(&self) -> &Shape { self.meta.shape() }
-    fn stride(&self) -> &Stride { self.meta.stride() }
-    fn offset(&self) -> usize { self.meta.offset() }
+    fn meta(&self) -> &MetaTensor {
+        &self.meta
+    }
 }
 
 impl <T: TensorValue, B> MetaTensorView for TensorViewMut<'_, T, B>
 where
     B: Backend<T>,
 {
-    fn shape(&self) -> &Shape { self.meta.shape() }
-    fn stride(&self) -> &Stride { self.meta.stride() }
-    fn offset(&self) -> usize { self.meta.offset() }
+    fn meta(&self) -> &MetaTensor {
+        &self.meta
+    }
 }
+
+
+fn innermost_contiguous_dim(meta_tensor: &MetaTensor) -> Option<usize> {
+    let rank = meta_tensor.rank();
+    for d in (0..rank).rev() {
+        if meta_tensor.stride[d] == 1 {
+            return Some(d);
+        }
+    }
+    None
+}
+
+/// Computes memory regions for a given inner dimension.
+/// For each combination of outer dimensions, a region covering the inner
+/// dimension is created, either as contiguous or strided.
+/// For example, for a tensor of shape [2,3,4] and inner=1 (the '3' dimension),
+/// the resulting regions will cover all 2*4=8 rows of length 3.
+fn regions_by_inner_dim(meta_tensor: MetaTensor, inner: usize) -> Vec<MemRegion> {
+    let rank = meta_tensor.rank();
+    let mut regions = Vec::new();
+
+    let inner_len = meta_tensor.shape[inner];
+    let inner_stride = meta_tensor.stride[inner];
+
+    // Build outer dims
+    let mut outer_shape = Vec::new();
+    let mut outer_strides = Vec::new();
+
+    for d in 0..rank {
+        if d == inner { continue; }
+        outer_shape.push(meta_tensor.shape[d]);
+        outer_strides.push(meta_tensor.stride[d]);
+    }
+
+    let mut outer_idx = vec![0; outer_shape.len()];
+
+    if outer_idx.len() == 0 {
+        // This is a pure 1D tensor
+        if inner_stride == 1 {
+            regions.push(MemRegion::Contiguous {
+                start: meta_tensor.offset,
+                len: inner_len,
+            });
+        } else {
+            regions.push(MemRegion::Strided {
+                start: meta_tensor.offset,
+                stride: inner_stride,
+                len: inner_len,
+            });
+        }
+        return regions;
+    }
+
+    // Iterate outer indices
+    'outer_loop: loop {
+        // Compute base offset for the current outer coordinates
+        let mut base = meta_tensor.offset;
+        let mut oi = 0;
+
+        for d in 0..rank {
+            if d == inner { continue; }
+            base += outer_idx[oi] * meta_tensor.stride[d];
+            oi += 1;
+        }
+
+        // Emit region
+        if inner_stride == 1 {
+            regions.push(MemRegion::Contiguous {
+                start: base,
+                len: inner_len,
+            });
+        } else {
+            regions.push(MemRegion::Strided {
+                start: base,
+                stride: inner_stride,
+                len: inner_len,
+            });
+        }
+
+        // Increment outer indices like a multi-digit counter
+        for i in (0..outer_idx.len()).rev() {
+            outer_idx[i] += 1;
+            if outer_idx[i] < outer_shape[i] {
+                continue 'outer_loop;
+            } else {
+                outer_idx[i] = 0;
+            }
+        }
+
+        break;
+    }
+
+    regions
+}
+
+
+// TODO tests for MetaTensor and MetaTensorView

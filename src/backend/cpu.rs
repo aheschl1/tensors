@@ -1,4 +1,6 @@
-use crate::{backend::{Backend, BackendUnary}, core::{tensor::TensorError, value::{TensorValue, TensorValueUnary}}, ops::elementwise::UnaryTensorOp};
+use std::ops::Range;
+
+use crate::{backend::{Backend, BackendElementwise}, core::{meta::MemRegion, tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::elementwise::ElementwiseTensorOp};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Cpu;
@@ -59,12 +61,44 @@ impl<T: TensorValue> Backend<T> for Cpu {
     }
 }
 
-impl<T: TensorValue + TensorValueUnary> BackendUnary<T> for Cpu {
-    fn apply_unary(&self, buf: &mut Self::Buf, op: UnaryTensorOp<T>, offsets: Vec<usize>) -> Result<(), TensorError> {
-        for offset in offsets {
-            let value = self.read(buf, offset)?;
-            let new_value = op.apply(value);
-            self.write(buf, offset, new_value)?;
+impl<T: TensorValue + TensorValueElementwise> BackendElementwise<T> for Cpu {
+    fn apply_elementwise_contiguous(
+        &self, buf: &mut Self::Buf, 
+        op: &ElementwiseTensorOp<T>, 
+        start: usize,
+        len: usize
+    ) -> Result<(), TensorError> {
+        let bufptr = buf.as_mut();
+        for i in start..(start + len) {
+            bufptr[i] = op.apply(bufptr[i].clone());
+        }
+        Ok(())
+    }
+    
+    fn apply_elementwise_strided(
+        &self, buf: &mut Self::Buf, 
+        op: &ElementwiseTensorOp<T>, 
+        start: usize,
+        stride: usize,
+        len: usize
+    ) -> Result<(), TensorError> {
+        let bufptr = buf.as_mut();
+        let mut idx = start;
+        for _ in 0..len {
+            bufptr[idx] = op.apply(bufptr[idx].clone());
+            idx += stride;
+        }
+        Ok(())
+    }
+    
+    fn apply_elementwise_scattered(
+        &self, buf: &mut Self::Buf, 
+        op: &ElementwiseTensorOp<T>, 
+        offsets: &[usize]
+    ) -> Result<(), TensorError> {
+        let bufptr = buf.as_mut();
+        for &idx in offsets {
+            bufptr[idx] = op.apply(bufptr[idx].clone());
         }
         Ok(())
     }

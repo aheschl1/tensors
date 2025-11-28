@@ -1,24 +1,24 @@
 use std::{borrow::Borrow, ops::{Mul, MulAssign}};
 
-use crate::{backend::{Backend, BackendUnary}, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::{TensorValue, TensorValueUnary}, TensorView, TensorViewMut}, ops::elementwise::UnaryTensorOp};
+use crate::{backend::{Backend, BackendElementwise}, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::{TensorValue, TensorValueElementwise}, TensorView, TensorViewMut}, ops::elementwise::ElementwiseTensorOp};
 
 impl<'a, T, B, O> MulAssign<O> for TensorViewMut<'a, T, B> 
-    where T: TensorValueUnary + TensorValue,
-          B: BackendUnary<T>,
+    where T: TensorValueElementwise + TensorValue,
+          B: BackendElementwise<T>,
           O: Borrow<T>
 {
     fn mul_assign(&mut self, rhs: O) {
-        self.backend.apply_unary(
+        self.backend.apply_elementwise(
             self.raw, 
-            UnaryTensorOp::Mul(*rhs.borrow()),
-            self.meta.offsets()
+            ElementwiseTensorOp::Mul(*rhs.borrow()),
+            self.meta.mem_regions().as_slice()
         ).unwrap();
     }
 }
 
 impl<'a, T, B, O> Mul<O> for TensorViewMut<'a, T, B> 
-    where T: TensorValueUnary + TensorValue,
-          B: BackendUnary<T>,
+    where T: TensorValueElementwise + TensorValue,
+          B: BackendElementwise<T>,
           O: Borrow<T>
 {
     type Output = TensorBase<B, T>;
@@ -32,8 +32,8 @@ impl<'a, T, B, O> Mul<O> for TensorViewMut<'a, T, B>
 }
 
 impl<'a, T, B, O> Mul<O> for TensorView<'a, T, B> 
-    where T: TensorValueUnary + TensorValue,
-          B: BackendUnary<T>,
+    where T: TensorValueElementwise + TensorValue,
+          B: BackendElementwise<T>,
           O: Borrow<T>
 {
     type Output = TensorBase<B, T>;

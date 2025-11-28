@@ -1,4 +1,4 @@
-#include "../include/kernels.h"
+#include "../../include/common.h"
 
 extern "C" __global__ void add_kernel(const float * a, const float * b, float * c, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;

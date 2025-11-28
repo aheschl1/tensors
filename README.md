@@ -13,7 +13,7 @@ Goal to add CUDA and optimized operations.
 - [X] Elementwise broadcasting
 - [ ] Basic linear algebra helpers
 - [ ] Accelerated backends (GPU / parallel)
-- [ ] x86 SIMD paths
+- [ ] x86 SIMD paths (currently relying on llvm auto-vectorization for CPU which only works for contiguous memory)
 - [ ] Multiple gpu devices allowed
 
 ## to optimize
@@ -21,5 +21,8 @@ Goal to add CUDA and optimized operations.
 - [ ] Elementwise ops require computing all offsets every time. perhaps cache them
 - [ ] `view_to_owned` can probably be optimized to copy larger chunks at once
 - [ ] Restrict tensor values to require basic operations
-- [ ] perf sucks ass. take advantage of contiguous memory buffers when available
+- [X] perf sucks for contiguous memory in unary CPU - fix
+- [X] perf sucks for contiguous memory in unary CUDA - fix
+- [ ] perf sucks for non-contiguous memory in unary CPU - fix
+- [X] perf sucks for non-contiguous memory in unary CUDA - fix
 - [ ] multiple cuda backends alive?

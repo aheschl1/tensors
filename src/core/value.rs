@@ -4,7 +4,7 @@ pub trait TensorValue:
     Default +
 {}
 
-pub trait TensorValueUnary: 
+pub trait TensorValueElementwise: 
     TensorValue + 
     std::ops::Add<Output = Self> + 
     std::ops::Sub<Output = Self> + 
@@ -26,15 +26,15 @@ impl TensorValue for u128 {}
 impl TensorValue for bool {}
 impl TensorValue for char {}
 
-impl TensorValueUnary for f32 {}
-impl TensorValueUnary for f64 {}
-impl TensorValueUnary for i8 {}
-impl TensorValueUnary for i16 {}
-impl TensorValueUnary for i32 {}
-impl TensorValueUnary for i64 {}
-impl TensorValueUnary for i128 {}
-impl TensorValueUnary for u8 {}
-impl TensorValueUnary for u16 {}
-impl TensorValueUnary for u32 {}
-impl TensorValueUnary for u64 {}
-impl TensorValueUnary for u128 {}
+impl TensorValueElementwise for f32 {}
+impl TensorValueElementwise for f64 {}
+impl TensorValueElementwise for i8 {}
+impl TensorValueElementwise for i16 {}
+impl TensorValueElementwise for i32 {}
+impl TensorValueElementwise for i64 {}
+impl TensorValueElementwise for i128 {}
+impl TensorValueElementwise for u8 {}
+impl TensorValueElementwise for u16 {}
+impl TensorValueElementwise for u32 {}
+impl TensorValueElementwise for u64 {}
+impl TensorValueElementwise for u128 {}

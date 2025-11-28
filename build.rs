@@ -79,15 +79,25 @@ fn find_cuda_kernel_files() -> Vec<PathBuf> {
     let kernels_dir = PathBuf::from("src/cuda/kernels");
     let mut cu_files = Vec::new();
     
-    if let Ok(entries) = fs::read_dir(&kernels_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("cu") {
-                cu_files.push(path);
+    // Recursively find all .cu files, excluding legacy folder
+    fn find_cu_files_recursive(dir: &PathBuf, cu_files: &mut Vec<PathBuf>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                
+                // Skip legacy directory
+                if path.is_dir() {
+                    if path.file_name().and_then(|s| s.to_str()) != Some("legacy") {
+                        find_cu_files_recursive(&path, cu_files);
+                    }
+                } else if path.extension().and_then(|s| s.to_str()) == Some("cu") {
+                    cu_files.push(path);
+                }
             }
         }
     }
     
+    find_cu_files_recursive(&kernels_dir, &mut cu_files);
     cu_files.sort();
     cu_files
 }
@@ -119,6 +129,8 @@ fn build_cuda_kernels() {
     println!("Found {} CUDA kernel file(s)", kernel_files.len());
     
     println!("cargo:rerun-if-changed=src/cuda/include/kernels.h");
+    println!("cargo:rerun-if-changed=src/cuda/include/common.h");
+    println!("cargo:rerun-if-changed=src/cuda/include/elementwise.h");
     for kernel_file in &kernel_files {
         println!("cargo:rerun-if-changed={}", kernel_file.display());
     }
@@ -130,7 +142,7 @@ fn build_cuda_kernels() {
     let code = "sm_86";
 
     // Build add.cu to PTX (for runtime JIT compilation in tests)
-    let add_cu = PathBuf::from("src/cuda/kernels/add.cu");
+    let add_cu = PathBuf::from("src/cuda/kernels/legacy/add.cu");
     if add_cu.exists() {
         let ptx_file = out_dir.join("add.ptx");
 
@@ -141,6 +153,8 @@ fn build_cuda_kernels() {
             .arg(&add_cu)
             .arg(format!("-arch={}", arch))
             .arg(format!("-code={}", code))
+            .arg("-I")
+            .arg("src/cuda/include")
             .status()
             .unwrap();
 
@@ -151,14 +165,10 @@ fn build_cuda_kernels() {
     }
 
     // Build all other .cu files to object files (for static linking)
-    // Exclude add.cu since it's only used for PTX generation
+    // Note: add.cu in legacy/ is excluded as it's only used for PTX generation
     let mut object_files = Vec::new();
     
     for kernel_file in &kernel_files {
-        // Skip add.cu (used for PTX only)
-        if kernel_file.file_name().and_then(|n| n.to_str()) == Some("add.cu") {
-            continue;
-        }
         
         let file_stem = kernel_file.file_stem()
             .and_then(|s| s.to_str())
