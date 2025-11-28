@@ -1,8 +1,8 @@
 # tensors and such
 
-Zero-dependency row‑major N‑dimensional tensor primitives.
+Tensor primitives with arbitrary view, shape, stride. Cuda and CPU backends
 
-Goal to add CUDA and optimized operations.
+Goal is high performance ML stack with minimal dependencies and maximal flexibility
 
 ## todo
 
@@ -12,9 +12,10 @@ Goal to add CUDA and optimized operations.
 - [ ] Slicing with ranges
 - [X] Elementwise broadcasting
 - [ ] Basic linear algebra helpers
-- [ ] Accelerated backends (GPU / parallel)
+- [X] Accelerated backends (GPU / parallel) in progress
 - [ ] x86 SIMD paths (currently relying on llvm auto-vectorization for CPU which only works for contiguous memory)
 - [ ] Multiple gpu devices allowed
+- [ ] CUDA scheduler for syncing and fusing ops
 
 ## to optimize
 
@@ -25,4 +26,3 @@ Goal to add CUDA and optimized operations.
 - [X] perf sucks for contiguous memory in unary CUDA - fix
 - [ ] perf sucks for non-contiguous memory in unary CPU - fix
 - [X] perf sucks for non-contiguous memory in unary CUDA - fix
-- [ ] multiple cuda backends alive?

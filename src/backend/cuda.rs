@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use cudarc::driver::{CudaContext, CudaSlice, DevicePtr, DeviceRepr};
 
@@ -7,18 +7,30 @@ use crate::{backend::{Backend, BackendElementwise}, core::{tensor::TensorError, 
 // Include bindgen-generated FFI declarations for CUDA kernel launchers
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-// Default block size for CUDA kernels - 256 is a good balance for modern GPUs
 // Can be tuned based on kernel characteristics and GPU architecture
 const DEFAULT_BLOCK_SIZE: u32 = 256;
+
+static CUDA_BACKENDS: LazyLock<Vec<Arc<CudaContext>>> = LazyLock::new(|| {
+    let mut backends = Vec::new();
+    let device_count = cudarc::driver::CudaContext::device_count().unwrap_or(0);
+    for device_id in 0..device_count {
+        let ctx = CudaContext::new(device_id as usize).unwrap();
+        backends.push(ctx);
+    }
+    backends
+});
+
 
 pub struct CudaBuf<T: TensorValue> {
     pub(crate) ptr: CudaSlice<T>,
     pub(crate) len: usize,
 }
 
+#[derive(Clone)]
 pub struct CudaBackend {
     pub(crate) ctx: Arc<CudaContext>,
 }
+
 
 impl CudaBackend {
     fn stream(&self) -> Arc<cudarc::driver::CudaStream> {
@@ -27,8 +39,10 @@ impl CudaBackend {
 
     pub(crate) fn construct(device: usize) -> Result<Self, TensorError> {
         // TODO multiple devices
-        let ctx = CudaContext::new(device).map_err(|e| TensorError::CudaError(e.to_string()))?;
-        Ok(Self { ctx })
+        let ctx = CUDA_BACKENDS.get(device)
+            .ok_or_else(|| TensorError::CudaError(format!("CUDA device {} not found", device)))?
+            .clone();
+        Ok(Self { ctx } )
     }
 }
 
