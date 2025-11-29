@@ -90,7 +90,7 @@ pub fn example_add() -> Result<Vec<f32>, TensorError> {
 #[cfg(feature = "cuda")]
 mod tests {
     use super::*;
-    use crate::core::{idx::Idx, primitives::CudaTensor, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, value::TensorValue, Shape};
+    use crate::core::{idx::Idx, primitives::CudaTensor, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, value::TensorValue, MetaTensorView, Shape, Slice};
     
     fn make_cuda_tensor<T: TensorValue + cudarc::driver::DeviceRepr>(buf: Vec<T>, shape: Shape) -> CudaTensor<T> {
         CudaTensor::from_buf(buf, shape).unwrap()
@@ -492,5 +492,149 @@ mod tests {
         let tensor = make_cuda_tensor(buf, shape);
         assert_eq!(index_tensor(Idx::At(0), &tensor.view()).unwrap(), 1);
         assert_eq!(index_tensor(Idx::At(n - 1), &tensor.view()).unwrap(), 1);
+    }
+
+    #[test]
+    fn test_cuda_custom_positive_step() {
+        // Test CUDA slicing with custom positive step values
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let tensor = make_cuda_tensor(buf, shape);
+        
+        // Step by 2: take every other element
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 0);
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 2);
+        assert_eq!(index_tensor(Idx::At(7), &slice).unwrap(), 14);
+        
+        // Step by 3: from index 1 to 10
+        let slice2 = view.slice(0, Slice::from(1..10).step(3)).unwrap();
+        assert_eq!(*slice2.shape(), vec![3]);
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 1);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 4);
+        assert_eq!(index_tensor(Idx::At(2), &slice2).unwrap(), 7);
+    }
+
+    #[test]
+    fn test_cuda_custom_negative_step() {
+        // Test CUDA slicing with custom negative step values
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let tensor = make_cuda_tensor(buf, shape);
+        let view = tensor.view();
+        
+        // Step by -2: every other element, reversed
+        let slice = view.slice(0, Slice::from(..).step(-2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 15);
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 13);
+        assert_eq!(index_tensor(Idx::At(7), &slice).unwrap(), 1);
+        
+        // Step by -3: from index 12 to 3
+        let slice2 = view.slice(0, Slice::from(12..3).step(-3)).unwrap();
+        assert_eq!(*slice2.shape(), vec![3]);
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 12);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 9);
+        assert_eq!(index_tensor(Idx::At(2), &slice2).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_cuda_custom_positive_step_mut() {
+        // Test mutable CUDA slicing with custom positive step
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_cuda_tensor(buf, shape);
+        
+        // Step by 2: modify every other element
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        
+        slice.set(&Idx::At(0), 100).unwrap(); // index 0
+        slice.set(&Idx::At(1), 102).unwrap(); // index 2
+        slice.set(&Idx::At(7), 114).unwrap(); // index 14
+        
+        // Verify changes in original tensor
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(0), &view).unwrap(), 100);
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 1); // Unchanged
+        assert_eq!(index_tensor(Idx::At(2), &view).unwrap(), 102);
+        assert_eq!(index_tensor(Idx::At(14), &view).unwrap(), 114);
+        assert_eq!(index_tensor(Idx::At(15), &view).unwrap(), 15); // Unchanged
+    }
+
+    #[test]
+    fn test_cuda_custom_positive_step_mut_with_range() {
+        // Test mutable CUDA slicing with step on a range
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_cuda_tensor(buf, shape);
+        
+        // Step by 3: from index 1 to 10
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(1..10).step(3)).unwrap();
+        assert_eq!(*slice.shape(), vec![3]); // Indices 1, 4, 7
+        
+        slice.set(&Idx::At(0), 101).unwrap(); // index 1
+        slice.set(&Idx::At(1), 104).unwrap(); // index 4
+        slice.set(&Idx::At(2), 107).unwrap(); // index 7
+        
+        // Verify
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(0), &view).unwrap(), 0);  // Unchanged
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 101);
+        assert_eq!(index_tensor(Idx::At(4), &view).unwrap(), 104);
+        assert_eq!(index_tensor(Idx::At(7), &view).unwrap(), 107);
+        assert_eq!(index_tensor(Idx::At(8), &view).unwrap(), 8);  // Unchanged
+    }
+
+    #[test]
+    fn test_cuda_custom_negative_step_mut() {
+        // Test mutable CUDA slicing with custom negative step
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_cuda_tensor(buf, shape);
+        
+        // Step by -2: every other element, reversed
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(..).step(-2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        
+        slice.set(&Idx::At(0), 115).unwrap(); // index 15
+        slice.set(&Idx::At(1), 113).unwrap(); // index 13
+        slice.set(&Idx::At(7), 101).unwrap(); // index 1
+        
+        // Verify changes
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 101);
+        assert_eq!(index_tensor(Idx::At(2), &view).unwrap(), 2);   // Unchanged
+        assert_eq!(index_tensor(Idx::At(13), &view).unwrap(), 113);
+        assert_eq!(index_tensor(Idx::At(15), &view).unwrap(), 115);
+    }
+
+    #[test]
+    fn test_cuda_custom_negative_step_mut_with_range() {
+        // Test mutable CUDA slicing with negative step on a range
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_cuda_tensor(buf, shape);
+        
+        // Step by -3: from index 12 to 3
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(12..3).step(-3)).unwrap();
+        assert_eq!(*slice.shape(), vec![3]); // Indices 12, 9, 6
+        
+        slice.set(&Idx::At(0), 212).unwrap(); // index 12
+        slice.set(&Idx::At(1), 209).unwrap(); // index 9
+        slice.set(&Idx::At(2), 206).unwrap(); // index 6
+        
+        // Verify
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(6), &view).unwrap(), 206);
+        assert_eq!(index_tensor(Idx::At(7), &view).unwrap(), 7);   // Unchanged
+        assert_eq!(index_tensor(Idx::At(9), &view).unwrap(), 209);
+        assert_eq!(index_tensor(Idx::At(12), &view).unwrap(), 212);
     }
 }

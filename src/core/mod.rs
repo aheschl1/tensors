@@ -4,14 +4,16 @@ pub mod meta;
 pub mod tensor;
 pub mod idx;
 pub mod value;
+pub mod slice;
 
 pub use meta::{Dim, Shape, Stride, MetaTensor, MetaTensorView, shape_to_stride};
 pub use primitives::{CpuTensor, TensorView, CpuTensorView, TensorViewMut};
+pub use slice::Slice;
 
 
 #[cfg(test)]
 mod tests {
-    use crate::{backend::Backend, core::{idx::Idx, value::TensorValue, tensor::{AsTensor, AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, CpuTensor, MetaTensor, MetaTensorView, Shape, Stride}};
+    use crate::{backend::Backend, core::{idx::Idx, value::TensorValue, tensor::{AsTensor, AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, CpuTensor, MetaTensor, MetaTensorView, Shape, Stride, Slice}};
 
     fn make_tensor<T: TensorValue>(buf: Vec<T>, shape: Shape) -> CpuTensor<T> {
         CpuTensor::from_buf(buf, shape).unwrap()
@@ -322,6 +324,468 @@ mod tests {
             tensor.view().slice(0, 2..1),
             Err(TensorError::IdxOutOfBounds)
         ));
+    }
+
+    #[test]
+    fn test_negative_step_basic() {
+        // Test basic negative step slicing on a 1D tensor
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![8];
+        let tensor = make_tensor(buf, shape);
+        
+        // Slice with step -1 (reverse)
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::full().step(-1)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 8);
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 7);
+        assert_eq!(index_tensor(Idx::At(7), &slice).unwrap(), 1);
+    }
+
+    #[test]
+    fn test_negative_step_with_range() {
+        // Test negative step with explicit start and end
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![8];
+        let tensor = make_tensor(buf, shape);
+        
+        // Slice from index 6 down to index 2 with step -1
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::new(Some(6), Some(2), Some(-1))).unwrap();
+        assert_eq!(*slice.shape(), vec![4]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 7); // index 6
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 6); // index 5
+        assert_eq!(index_tensor(Idx::At(2), &slice).unwrap(), 5); // index 4
+        assert_eq!(index_tensor(Idx::At(3), &slice).unwrap(), 4); // index 3
+    }
+
+    #[test]
+    fn test_negative_step_skip_elements() {
+        // Test negative step -2 (every other element backwards)
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![8];
+        let tensor = make_tensor(buf, shape);
+        
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::full().step(-2)).unwrap();
+        assert_eq!(*slice.shape(), vec![4]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 8); // index 7
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 6); // index 5
+        assert_eq!(index_tensor(Idx::At(2), &slice).unwrap(), 4); // index 3
+        assert_eq!(index_tensor(Idx::At(3), &slice).unwrap(), 2); // index 1
+    }
+
+    #[test]
+    fn test_negative_step_matrix_rows() {
+        // Test negative step on matrix rows
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6,
+            7, 8, 9,
+            10, 11, 12
+        ];
+        let shape = vec![4, 3];
+        let tensor = make_tensor(buf, shape);
+        
+        // Reverse rows with step -1
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::full().step(-1)).unwrap();
+        assert_eq!(*slice.shape(), vec![4, 3]);
+        
+        // First row should be the last row of original
+        assert_eq!(index_tensor(Idx::Coord(&[0, 0]), &slice).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::Coord(&[0, 1]), &slice).unwrap(), 11);
+        assert_eq!(index_tensor(Idx::Coord(&[0, 2]), &slice).unwrap(), 12);
+        
+        // Last row should be the first row of original
+        assert_eq!(index_tensor(Idx::Coord(&[3, 0]), &slice).unwrap(), 1);
+        assert_eq!(index_tensor(Idx::Coord(&[3, 1]), &slice).unwrap(), 2);
+        assert_eq!(index_tensor(Idx::Coord(&[3, 2]), &slice).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_negative_step_with_start_less_than_end() {
+        // When step is negative and start < end, result should be empty
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![6];
+        let tensor = make_tensor(buf, shape);
+        
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::new(Some(2), Some(5), Some(-1))).unwrap();
+        assert_eq!(*slice.shape(), vec![]); // Empty slice
+    }
+
+    #[test]
+    fn test_positive_step_with_start_greater_than_end() {
+        // When step is positive and start > end, result should be empty
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![6];
+        let tensor = make_tensor(buf, shape);
+        
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::new(Some(5), Some(2), Some(1))).unwrap();
+        assert_eq!(*slice.shape(), vec![]); // Empty slice
+    }
+
+    #[test]
+    fn test_negative_step_partial_range() {
+        // Test negative step with only start specified
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![8];
+        let tensor = make_tensor(buf, shape);
+        
+        // From index 5 going backwards to the beginning
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::new(Some(5), None, Some(-1))).unwrap();
+        assert_eq!(*slice.shape(), vec![6]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 6); // index 5
+        assert_eq!(index_tensor(Idx::At(5), &slice).unwrap(), 1); // index 0
+    }
+
+    #[test]
+    fn test_negative_step_partial_end() {
+        // Test negative step with only end specified
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![8];
+        let tensor = make_tensor(buf, shape);
+        
+        // From the end going backwards to index 3
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::new(None, Some(3), Some(-1))).unwrap();
+        assert_eq!(*slice.shape(), vec![4]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 8); // index 7
+        assert_eq!(index_tensor(Idx::At(3), &slice).unwrap(), 5); // index 4
+    }
+
+    #[test]
+    fn test_negative_step_3d_tensor() {
+        // Test negative step on 3D tensor
+        let buf = vec![
+            1, 2, 3, 4,
+            5, 6, 7, 8,
+            9, 10, 11, 12,
+            13, 14, 15, 16
+        ];
+        let shape = vec![4, 2, 2];
+        let tensor = make_tensor(buf, shape);
+        
+        // Reverse along the depth dimension
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::full().step(-1)).unwrap();
+        assert_eq!(*slice.shape(), vec![4, 2, 2]);
+        
+        // First depth slice should be the last one of original
+        assert_eq!(index_tensor(Idx::Coord(&[0, 0, 0]), &slice).unwrap(), 13);
+        assert_eq!(index_tensor(Idx::Coord(&[0, 1, 1]), &slice).unwrap(), 16);
+        
+        // Last depth slice should be the first one of original
+        assert_eq!(index_tensor(Idx::Coord(&[3, 0, 0]), &slice).unwrap(), 1);
+        assert_eq!(index_tensor(Idx::Coord(&[3, 1, 1]), &slice).unwrap(), 4);
+    }
+
+    #[test]
+    fn test_negative_step_chained() {
+        // Test chaining slices with negative steps
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let shape = vec![10];
+        let tensor = make_tensor(buf, shape);
+        
+        // First reverse the whole array
+        let view = tensor.view();
+        let slice1 = view.slice(0, Slice::full().step(-1)).unwrap();
+        assert_eq!(index_tensor(Idx::At(0), &slice1).unwrap(), 10);
+        
+        // Then take every other element
+        let slice2 = slice1.slice(0, Slice::full().step(2)).unwrap();
+        assert_eq!(*slice2.shape(), vec![5]);
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 8);
+        assert_eq!(index_tensor(Idx::At(4), &slice2).unwrap(), 2);
+    }
+
+    #[test]
+    fn test_negative_step_funtax() {
+        // Test chaining slices with negative steps
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let shape = vec![10];
+        let tensor = make_tensor(buf, shape);
+        
+        // Then take every other element
+        let view = tensor.view();
+        let slice2 = view.slice(0, 9..=0).unwrap();
+        assert_eq!(*slice2.shape(), vec![10]);
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 9);
+        assert_eq!(index_tensor(Idx::At(2), &slice2).unwrap(), 8);
+    }
+
+    #[test]
+    fn test_negative_step_mut() {
+        // Test mutable slicing with negative step
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![6];
+        let mut tensor = make_tensor(buf, shape);
+        
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::full().step(-1)).unwrap();
+        
+        // Modify reversed view
+        slice.set(&Idx::At(0), 60).unwrap(); // Should modify index 5
+        slice.set(&Idx::At(5), 10).unwrap(); // Should modify index 0
+        
+        // Check original tensor
+        assert_eq!(index_tensor(Idx::At(0), &tensor.view()).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::At(5), &tensor.view()).unwrap(), 60);
+    }
+
+    #[test]
+    fn test_negative_step_mut_funtax() {
+        // Test mutable slicing with negative step
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![6];
+        let mut tensor = make_tensor(buf, shape);
+        
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(..).step(-1)).unwrap();
+        
+        // Modify reversed view
+        slice.set(&Idx::At(0), 60).unwrap(); // Should modify index 5
+        slice.set(&Idx::At(5), 10).unwrap(); // Should modify index 0
+        
+        // Check original tensor
+        assert_eq!(index_tensor(Idx::At(0), &tensor.view()).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::At(5), &tensor.view()).unwrap(), 60);
+    }
+
+    #[test]
+    fn test_negative_step_errors() {
+        let tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![6]);
+        
+        // Invalid start index with negative step
+        assert!(matches!(
+            tensor.view().slice(0, Slice::new(Some(10), Some(2), Some(-1))),
+            Err(TensorError::IdxOutOfBounds)
+        ));
+        
+        // Invalid end index with negative step
+        assert!(matches!(
+            tensor.view().slice(0, Slice::new(Some(5), Some(10), Some(-1))),
+            Err(TensorError::IdxOutOfBounds)
+        ));
+        
+        // Step of 0 should error
+        assert!(matches!(
+            tensor.view().slice(0, Slice::new(Some(2), Some(5), Some(0))),
+            Err(TensorError::InvalidShape)
+        ));
+    }
+
+    #[test]
+    fn test_reverse_range_auto_negative_step() {
+        // Test that reversed ranges automatically get negative step
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let shape = vec![10];
+        let tensor = make_tensor(buf, shape);
+        
+        // Exclusive range with start > end should auto-reverse
+        let view = tensor.view();
+        let slice = view.slice(0, 9..0).unwrap();
+        assert_eq!(*slice.shape(), vec![9]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 10); // index 9
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 9);  // index 8
+        assert_eq!(index_tensor(Idx::At(8), &slice).unwrap(), 2);  // index 1
+        
+        // Inclusive range with start > end should auto-reverse
+        let view = tensor.view();
+        let slice = view.slice(0, 9..=0).unwrap();
+        assert_eq!(*slice.shape(), vec![10]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 10); // index 9
+        assert_eq!(index_tensor(Idx::At(9), &slice).unwrap(), 1);  // index 0
+    }
+
+    #[test]
+    fn test_custom_positive_step() {
+        // Test slicing with custom positive step values (step > 1)
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let tensor = make_tensor(buf, shape);
+        
+        // Step by 2: take every other element from full range
+        let view = tensor.view();
+        let slice = view.slice(0, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 0);
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 2);
+        assert_eq!(index_tensor(Idx::At(2), &slice).unwrap(), 4);
+        assert_eq!(index_tensor(Idx::At(7), &slice).unwrap(), 14);
+        
+        // Step by 3: from index 1 to 8
+        let slice2 = view.slice(0, Slice::from(1..8).step(3)).unwrap();
+        assert_eq!(*slice2.shape(), vec![3]); // Indices 1, 4, 7
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 1);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 4);
+        assert_eq!(index_tensor(Idx::At(2), &slice2).unwrap(), 7);
+        
+        // Step by 4: from start to 12
+        let slice3 = view.slice(0, Slice::from(..12).step(4)).unwrap();
+        assert_eq!(*slice3.shape(), vec![3]); // Indices 0, 4, 8
+        assert_eq!(index_tensor(Idx::At(0), &slice3).unwrap(), 0);
+        assert_eq!(index_tensor(Idx::At(1), &slice3).unwrap(), 4);
+        assert_eq!(index_tensor(Idx::At(2), &slice3).unwrap(), 8);
+        
+        // Step by 5: from 3 to end
+        let slice4 = view.slice(0, Slice::from(3..).step(5)).unwrap();
+        assert_eq!(*slice4.shape(), vec![3]); // Indices 3, 8, 13
+        assert_eq!(index_tensor(Idx::At(0), &slice4).unwrap(), 3);
+        assert_eq!(index_tensor(Idx::At(1), &slice4).unwrap(), 8);
+        assert_eq!(index_tensor(Idx::At(2), &slice4).unwrap(), 13);
+        
+        // Large step: step by 10
+        let slice5 = view.slice(0, Slice::from(2..).step(10)).unwrap();
+        assert_eq!(*slice5.shape(), vec![2]); // Indices 2, 12
+        assert_eq!(index_tensor(Idx::At(0), &slice5).unwrap(), 2);
+        assert_eq!(index_tensor(Idx::At(1), &slice5).unwrap(), 12);
+    }
+
+    #[test]
+    fn test_custom_negative_step() {
+        // Test slicing with custom negative step values (step < -1)
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let tensor = make_tensor(buf, shape);
+        let view = tensor.view();
+        
+        // Step by -2: every other element, reversed
+        let slice = view.slice(0, Slice::from(..).step(-2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 15); // Start from end
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 13);
+        assert_eq!(index_tensor(Idx::At(2), &slice).unwrap(), 11);
+        assert_eq!(index_tensor(Idx::At(7), &slice).unwrap(), 1);
+        
+        // Step by -3: from index 10 to 1
+        let slice2 = view.slice(0, Slice::from(10..1).step(-3)).unwrap();
+        assert_eq!(*slice2.shape(), vec![3]); // Indices 10, 7, 4
+        assert_eq!(index_tensor(Idx::At(0), &slice2).unwrap(), 10);
+        assert_eq!(index_tensor(Idx::At(1), &slice2).unwrap(), 7);
+        assert_eq!(index_tensor(Idx::At(2), &slice2).unwrap(), 4);
+        
+        // Step by -4: from end to index 2
+        let slice3 = view.slice(0, Slice::from(..2).step(-4)).unwrap();
+        assert_eq!(*slice3.shape(), vec![4]); // Indices 15, 11, 7, 3
+        assert_eq!(index_tensor(Idx::At(0), &slice3).unwrap(), 15);
+        assert_eq!(index_tensor(Idx::At(1), &slice3).unwrap(), 11);
+        assert_eq!(index_tensor(Idx::At(2), &slice3).unwrap(), 7);
+        assert_eq!(index_tensor(Idx::At(3), &slice3).unwrap(), 3);
+        
+        // Step by -5: from index 14 to start
+        let slice4 = view.slice(0, Slice::from(14..).step(-5)).unwrap();
+        assert_eq!(*slice4.shape(), vec![3]); // Indices 14, 9, 4
+        assert_eq!(index_tensor(Idx::At(0), &slice4).unwrap(), 14);
+        assert_eq!(index_tensor(Idx::At(1), &slice4).unwrap(), 9);
+        assert_eq!(index_tensor(Idx::At(2), &slice4).unwrap(), 4);
+    }
+
+    #[test]
+    fn test_custom_positive_step_mut() {
+        // Test mutable slicing with custom positive step values
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_tensor(buf, shape);
+        
+        // Step by 2: modify every other element
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        
+        // Set values at step positions
+        slice.set(&Idx::At(0), 100).unwrap(); // index 0
+        slice.set(&Idx::At(1), 102).unwrap(); // index 2
+        slice.set(&Idx::At(7), 114).unwrap(); // index 14
+        
+        // Verify changes in original tensor
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(0), &view).unwrap(), 100);
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 1); // Unchanged
+        assert_eq!(index_tensor(Idx::At(2), &view).unwrap(), 102);
+        assert_eq!(index_tensor(Idx::At(3), &view).unwrap(), 3); // Unchanged
+        assert_eq!(index_tensor(Idx::At(14), &view).unwrap(), 114);
+        assert_eq!(index_tensor(Idx::At(15), &view).unwrap(), 15); // Unchanged
+    }
+
+    #[test]
+    fn test_custom_positive_step_mut_with_range() {
+        // Test mutable slicing with step on a range
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_tensor(buf, shape);
+        
+        // Step by 3: from index 1 to 10
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(1..10).step(3)).unwrap();
+        assert_eq!(*slice.shape(), vec![3]); // Indices 1, 4, 7
+        
+        slice.set(&Idx::At(0), 101).unwrap(); // index 1
+        slice.set(&Idx::At(1), 104).unwrap(); // index 4
+        slice.set(&Idx::At(2), 107).unwrap(); // index 7
+        
+        // Verify
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(0), &view).unwrap(), 0);  // Unchanged
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 101);
+        assert_eq!(index_tensor(Idx::At(4), &view).unwrap(), 104);
+        assert_eq!(index_tensor(Idx::At(7), &view).unwrap(), 107);
+        assert_eq!(index_tensor(Idx::At(8), &view).unwrap(), 8);  // Unchanged
+    }
+
+    #[test]
+    fn test_custom_negative_step_mut() {
+        // Test mutable slicing with custom negative step values
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_tensor(buf, shape);
+        
+        // Step by -2: every other element, reversed
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(..).step(-2)).unwrap();
+        assert_eq!(*slice.shape(), vec![8]);
+        
+        slice.set(&Idx::At(0), 115).unwrap(); // index 15
+        slice.set(&Idx::At(1), 113).unwrap(); // index 13
+        slice.set(&Idx::At(7), 101).unwrap(); // index 1
+        
+        // Verify changes
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(1), &view).unwrap(), 101);
+        assert_eq!(index_tensor(Idx::At(2), &view).unwrap(), 2);   // Unchanged
+        assert_eq!(index_tensor(Idx::At(13), &view).unwrap(), 113);
+        assert_eq!(index_tensor(Idx::At(14), &view).unwrap(), 14); // Unchanged
+        assert_eq!(index_tensor(Idx::At(15), &view).unwrap(), 115);
+    }
+
+    #[test]
+    fn test_custom_negative_step_mut_with_range() {
+        // Test mutable slicing with negative step on a range
+        let buf = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let shape = vec![16];
+        let mut tensor = make_tensor(buf, shape);
+        
+        // Step by -3: from index 12 to 3
+        let mut view = tensor.view_mut();
+        let mut slice = view.slice_mut(0, Slice::from(12..3).step(-3)).unwrap();
+        assert_eq!(*slice.shape(), vec![3]); // Indices 12, 9, 6
+        
+        slice.set(&Idx::At(0), 212).unwrap(); // index 12
+        slice.set(&Idx::At(1), 209).unwrap(); // index 9
+        slice.set(&Idx::At(2), 206).unwrap(); // index 6
+        
+        // Verify
+        let view = tensor.view();
+        assert_eq!(index_tensor(Idx::At(6), &view).unwrap(), 206);
+        assert_eq!(index_tensor(Idx::At(7), &view).unwrap(), 7);   // Unchanged
+        assert_eq!(index_tensor(Idx::At(9), &view).unwrap(), 209);
+        assert_eq!(index_tensor(Idx::At(10), &view).unwrap(), 10); // Unchanged
+        assert_eq!(index_tensor(Idx::At(12), &view).unwrap(), 212);
     }
 
     #[test]
@@ -1018,8 +1482,7 @@ mod tests {
         assert_eq!(*owned.shape(), vec![2, 3]);
         assert_eq!(owned.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
-
-
+    
     // #[test]
     // fn test_view_as_with_non_contiguous_data_exposes_flaw() {
     //     // Create a 2x6 matrix:

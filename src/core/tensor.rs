@@ -1,7 +1,6 @@
 
-use std::ops::{Range, RangeBounds};
-
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, value::TensorValue, Dim, MetaTensor, Shape, Stride, TensorView, TensorViewMut}};
+use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, value::TensorValue, Dim, MetaTensor, Stride, TensorView, TensorViewMut}};
+use super::slice::{Slice, compute_sliced_parameters};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -126,21 +125,21 @@ pub trait TensorAccess<T: TensorValue, B: Backend<T>>: Sized {
         self.get(Idx::Item)
     }
     /// Create a slice/view of the tensor along a specific dimension at a given index
-    fn slice<R: RangeBounds<Dim>>(&self, dim: Dim, idx: R) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized;
+    fn slice<S: Into<Slice>>(&self, dim: Dim, idx: S) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized;
     /// take a slice at given index
     fn slice_at(&self, dim: Dim, at: usize) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized{
-        self.slice(dim, at..at)
+        self.slice(dim, at)
     }
 }
 
 pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
     /// Slice mutable tensor to get a mutable view
-    fn slice_mut<R: RangeBounds<Dim>>(&mut self, dim: Dim, idx: R) -> Result<TensorViewMut<'_, T, B>, TensorError> where Self: Sized;
+    fn slice_mut<S: Into<Slice>>(&mut self, dim: Dim, idx: S) -> Result<TensorViewMut<'_, T, B>, TensorError> where Self: Sized;
     /// sets a value at given index
     fn set<'a, I: Into<Idx<'a>>>(&mut self, idx: I, value: T) -> Result<(), TensorError>;
     /// take a mutable slice at given index
     fn slice_at_mut(&mut self, dim: Dim, idx: Dim) -> Result<TensorViewMut<'_, T, B>, TensorError> where Self: Sized{
-        self.slice_mut(dim, idx..idx)
+        self.slice_mut(dim, idx)
     }
 }
 
@@ -164,7 +163,7 @@ where B: Backend<T>
     /// Errors
     /// - `InvalidDim` if `dim` is out of range.
     /// - `IdxOutOfBounds` if `idx` exceeds the size of `dim`.
-    fn slice<R: RangeBounds<Dim>>(&self, dim: Dim, idx: R) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized {
+    fn slice<S: Into<Slice>>(&self, dim: Dim, idx: S) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized {
         let (new_shape, new_stride, offset) = compute_sliced_parameters(
             self.meta.shape(), 
             self.meta.stride(), 
@@ -198,7 +197,7 @@ where B: Backend<T>
     /// Errors
     /// - `InvalidDim` if `dim` is out of range.
     /// - `IdxOutOfBounds` if `idx` exceeds the size of `dim`.
-    fn slice<R: RangeBounds<Dim>>(&self, dim: Dim, idx: R) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized {
+    fn slice<S: Into<Slice>>(&self, dim: Dim, idx: S) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized {
         let (new_shape, new_stride, offset) = compute_sliced_parameters(
             self.meta.shape(), 
             self.meta.stride(), 
@@ -221,7 +220,7 @@ impl<T: TensorValue, B: Backend<T>> TensorAccessMut<T, B> for TensorViewMut<'_, 
     /// Errors
     /// - `InvalidDim` if `dim` is out of range.
     /// - `IdxOutOfBounds` if `idx` exceeds the size of `dim`.
-    fn slice_mut<R: RangeBounds<Dim>>(&mut self, dim: Dim, idx: R) -> Result<TensorViewMut<'_, T, B>, TensorError> {
+    fn slice_mut<S: Into<Slice>>(&mut self, dim: Dim, idx: S) -> Result<TensorViewMut<'_, T, B>, TensorError> {
         let (new_shape, new_stride, offset) =
             compute_sliced_parameters(self.meta.shape(), self.meta.stride(), self.meta.offset(), dim, idx)?;
     
@@ -302,146 +301,3 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
         }
     }
 }
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Slice {
-    pub start: Option<usize>,
-    pub end: Option<usize>,
-    pub step: Option<isize>,
-}
-
-impl Slice {
-    pub fn new(start: Option<usize>, end: Option<usize>, step: Option<isize>) -> Self {
-        Slice { start, end, step }
-    }
-
-    pub fn full() -> Self {
-        Slice { start: None, end: None, step: None }
-    }
-
-    pub fn step(mut self, step: isize) -> Self {
-        self.step = Some(step);
-        self
-    }
-
-    pub fn start(mut self, start: usize) -> Self {
-        self.start = Some(start);
-        self
-    }
-
-    pub fn end(mut self, end: usize) -> Self {
-        self.end = Some(end);
-        self
-    }
-}
-
-impl<R> From<R> for Slice 
-where R: RangeBounds<usize>
-{
-    fn from(range: R) -> Self {
-        let start = match range.start_bound() {
-            std::ops::Bound::Included(&s) => Some(s),
-            std::ops::Bound::Excluded(&s) => Some(s + 1),
-            std::ops::Bound::Unbounded    => None,
-        };
-
-        let end = match range.end_bound() {
-            std::ops::Bound::Included(&e) => Some(e + 1),
-            std::ops::Bound::Excluded(&e) => Some(e),
-            std::ops::Bound::Unbounded    => None,
-        };
-
-        Slice {
-            start: start,
-            end: end,
-            step: None,
-        }
-    }
-}
-
-/// Computes the new shape, stride, and offset for a view obtained by fixing
-/// the dimension `dim` to index `idx`.
-///
-/// Behavior
-/// - Removes the selected dimension from `shape` and `stride`.
-/// - Advances `offset` by `stride[dim] * idx`.
-///
-/// Errors
-/// - `InvalidDim` if `dim` is out of bounds.
-/// - `IdxOutOfBounds` if `idx >= shape[dim]`.
-fn compute_sliced_parameters(
-    shape: &Shape,
-    stride: &Stride,
-    offset: usize,
-    dim: usize,
-    slice: impl Into<Slice>
-) -> Result<(Shape, Stride, usize), TensorError>
-{
-    let slice:  Slice = slice.into();
-
-    if dim >= shape.len() {
-        return Err(TensorError::InvalidDim);
-    }
-    
-    let step: isize = slice.step.unwrap_or(1);
-    if step == 0 {
-        return Err(TensorError::InvalidShape);
-    }
-
-    let start: isize = match slice.start {
-        Some(s) => s as isize,
-        None if step > 0 => 0,
-        None if step < 0 => (shape[dim] as isize) - 1, // end inclusive
-        _ => unreachable!(),
-    };
-
-    let end: isize = match slice.end {
-        Some(e) => e as isize,
-        None if step > 0 => shape[dim] as isize,
-        None if step < 0 => -1, // start exclusive
-        _ => unreachable!(),
-    };
-
-    // range check
-    if step > 0 && (start < 0 || start >= shape[dim] as isize || end < 0 || end > shape[dim] as isize) {
-        return Err(TensorError::IdxOutOfBounds);
-    }
-
-    if step < 0 && (start < 0 || start >= shape[dim] as isize || end < -1 || end >= shape[dim] as isize) {
-        return Err(TensorError::IdxOutOfBounds);
-    }
-
-    let len: usize = {
-        if (step > 0 && start >= end) || (step < 0 && start <= end) {
-            0
-        } else {
-            let dist = (start - end).abs() - 1;
-            (dist as usize / step.abs() as usize) + 1
-        }
-    };
-
-    if len == 0 {
-        // collapse to empty slice
-        let mut new_shape = shape.clone();
-        let mut new_stride = stride.clone();
-        new_shape.remove(dim);
-        new_stride.remove(dim);
-
-        let clamped_start = start.clamp(0, (shape[dim] - 1) as isize);
-        let new_offset = offset + (clamped_start * stride[dim]).max(0) as usize;
-        return Ok((new_shape, new_stride, new_offset));
-    }
-
-    let clamped_start = start.clamp(0, (shape[dim] - 1) as isize) as usize;
-    let new_offset = offset + (clamped_start as isize * stride[dim]) as usize;
-
-    let mut new_shape = shape.clone();
-    let mut new_stride = stride.clone();
-
-    new_shape[dim] = len;
-    new_stride[dim] = (stride[dim] * step).abs();
-
-    Ok((new_shape, new_stride, new_offset))
-    
-}
-
