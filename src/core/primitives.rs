@@ -105,26 +105,6 @@ where
             meta,
         }
     }
-
-    /// Reinterprets this view with a different shape of the same total number
-    /// of elements. Stride is recomputed for standard row-major layout; offset
-    /// is preserved.
-    ///
-    /// Errors
-    /// - `InvalidShape` if the product of the new shape doesn't match the old size.
-    pub(crate) fn view_as(self, shape: Shape) -> Result<Self, TensorError> {
-        let new_size: usize = shape.iter().product();
-        let old_size = self.meta.shape().iter().product();
-        match new_size.cmp(&old_size) {
-            std::cmp::Ordering::Equal => {
-                let stride = shape_to_stride(&shape);
-                let meta = MetaTensor::new(shape, stride, self.meta.offset());
-                let tensor = Self::from_parts(self.raw, self.backend, meta);
-                Ok(tensor)
-            }
-            _ => Err(TensorError::InvalidShape),
-        }
-    }
 }
 
 impl<'a, T, B> TensorViewMut<'a, T, B>
@@ -143,26 +123,6 @@ where
             raw,
             backend,
             meta
-        }
-    }
-
-    /// Reinterprets this view with a different shape of the same total number
-    /// of elements. Stride is recomputed for standard row-major layout; offset
-    /// is preserved.
-    ///
-    /// Errors
-    /// - `InvalidShape` if the product of the new shape doesn't match the old size.
-    pub(crate) fn view_as(self, shape: Shape) -> Result<Self, TensorError> {
-        let new_size: usize = shape.iter().product();
-        let old_size = self.meta.shape().iter().product();
-        match new_size.cmp(&old_size) {
-            std::cmp::Ordering::Equal => {
-                let stride = shape_to_stride(&shape);
-                let meta = MetaTensor::new(shape, stride, self.meta.offset());
-                let tensor = Self::from_parts(self.raw, self.backend, meta);
-                Ok(tensor)
-            }
-            _ => Err(TensorError::InvalidShape),
         }
     }
 }

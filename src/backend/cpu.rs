@@ -1,5 +1,5 @@
 
-use crate::{backend::{Backend, BackendElementwise}, core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::elementwise::ElementwiseTensorOp};
+use crate::{backend::{Backend, BackendBinaryElementwise, BackendUnaryElementwise}, core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::unary::ElementwiseTensorOp};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Cpu;
@@ -60,7 +60,7 @@ impl<T: TensorValue> Backend<T> for Cpu {
     }
 }
 
-impl<T: TensorValue + TensorValueElementwise> BackendElementwise<T> for Cpu {
+impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu {
     fn apply_elementwise_contiguous(
         &self, buf: &mut Self::Buf, 
         op: &ElementwiseTensorOp<T>, 
@@ -90,15 +90,29 @@ impl<T: TensorValue + TensorValueElementwise> BackendElementwise<T> for Cpu {
         Ok(())
     }
     
-    fn apply_elementwise_scattered(
-        &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
-        offsets: &[usize]
+    // fn apply_elementwise_scattered(
+    //     &self, buf: &mut Self::Buf, 
+    //     op: &ElementwiseTensorOp<T>, 
+    //     offsets: &[usize]
+    // ) -> Result<(), TensorError> {
+    //     let bufptr = buf.as_mut();
+    //     for &idx in offsets {
+    //         bufptr[idx] = op.apply(bufptr[idx]);
+    //     }
+    //     Ok(())
+    // }
+}
+
+impl<T> BackendBinaryElementwise<T> for Cpu 
+where T: TensorValue + TensorValueElementwise
+{
+    fn merge(
+        &self, 
+        left: (&Self::Buf, &[crate::core::meta::MemRegion]), 
+        right: (&Self::Buf, &[crate::core::meta::MemRegion]),
+        dst: (&mut Self::Buf, &[crate::core::meta::MemRegion]),
+        op: ElementwiseTensorOp<T>
     ) -> Result<(), TensorError> {
-        let bufptr = buf.as_mut();
-        for &idx in offsets {
-            bufptr[idx] = op.apply(bufptr[idx]);
-        }
-        Ok(())
+        todo!()
     }
 }

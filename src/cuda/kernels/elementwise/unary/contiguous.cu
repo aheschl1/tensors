@@ -1,4 +1,4 @@
-#include "../../include/elementwise.h"
+#include "../../../include/unary.h"
 
 template <typename T>
 __global__ void elementwise_contiguous_kernel(

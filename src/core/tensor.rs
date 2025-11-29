@@ -127,6 +127,10 @@ pub trait TensorAccess<T: TensorValue, B: Backend<T>>: Sized {
     }
     /// Create a slice/view of the tensor along a specific dimension at a given index
     fn slice<R: RangeBounds<Dim>>(&self, dim: Dim, idx: R) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized;
+    /// take a slice at given index
+    fn slice_at(&self, dim: Dim, at: usize) -> Result<TensorView<'_, T, B>, TensorError> where Self: Sized{
+        self.slice(dim, at..at)
+    }
 }
 
 pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
@@ -134,6 +138,10 @@ pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
     fn slice_mut<R: RangeBounds<Dim>>(&mut self, dim: Dim, idx: R) -> Result<TensorViewMut<'_, T, B>, TensorError> where Self: Sized;
     /// sets a value at given index
     fn set<'a, I: Into<Idx<'a>>>(&mut self, idx: I, value: T) -> Result<(), TensorError>;
+    /// take a mutable slice at given index
+    fn slice_at_mut(&mut self, dim: Dim, idx: Dim) -> Result<TensorViewMut<'_, T, B>, TensorError> where Self: Sized{
+        self.slice_mut(dim, idx..idx)
+    }
 }
 
 impl<T: TensorValue, B: Backend<T>> TensorAccess<T, B> for TensorView<'_, T, B>

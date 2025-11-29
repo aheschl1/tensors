@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, ops::{Sub, SubAssign}};
 
-use crate::{backend::BackendElementwise, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::{TensorValue, TensorValueElementwise}, TensorView, TensorViewMut}, ops::elementwise::ElementwiseTensorOp};
+use crate::{backend::BackendUnaryElementwise, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::{TensorValue, TensorValueElementwise}, TensorView, TensorViewMut}, ops::unary::ElementwiseTensorOp};
 
 impl<'a, T, B, O> SubAssign<O> for TensorViewMut<'a, T, B> 
     where T: TensorValueElementwise+ TensorValue,
-          B: BackendElementwise<T>,
+          B: BackendUnaryElementwise<T>,
           O: Borrow<T>
 {
     fn sub_assign(&mut self, rhs: O) {
@@ -18,7 +18,7 @@ impl<'a, T, B, O> SubAssign<O> for TensorViewMut<'a, T, B>
 
 impl<'a, T, B, O> Sub<O> for TensorViewMut<'a, T, B> 
     where T: TensorValueElementwise + TensorValue,
-          B: BackendElementwise<T>,
+          B: BackendUnaryElementwise<T>,
           O: Borrow<T>
 {
     type Output = TensorBase<B, T>;
@@ -33,7 +33,7 @@ impl<'a, T, B, O> Sub<O> for TensorViewMut<'a, T, B>
 
 impl<'a, T, B, O> Sub<O> for TensorView<'a, T, B> 
     where T: TensorValueElementwise + TensorValue,
-          B: BackendElementwise<T>,
+          B: BackendUnaryElementwise<T>,
           O: Borrow<T>
 {
     type Output = TensorBase<B, T>;
