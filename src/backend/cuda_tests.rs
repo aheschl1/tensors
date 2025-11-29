@@ -428,7 +428,10 @@ mod tests {
 
     #[test]
     fn test_cuda_slice_errors() {
-        let tensor = make_cuda_tensor(vec![1, 2, 3, 4], vec![2, 2]);
+        let tensor = make_cuda_tensor(
+            vec![1, 2, 3, 4],
+            vec![2, 2]
+        );
         assert!(matches!(
             tensor.view().slice(3, 0..0),
             Err(TensorError::InvalidDim)

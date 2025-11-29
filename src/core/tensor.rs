@@ -279,10 +279,14 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
             if idx.len() != stride.len() {
                 Err(TensorError::WrongDims)
             }else{
-                Ok(idx
+                let bidx = idx
                     .iter()
                     .zip(stride)
-                    .fold(offset, |acc, (a, b)| acc + *a*b))
+                    .fold(offset as isize, |acc, (a, b)| acc + (*a as isize) * *b);
+                if bidx < 0 {
+                    return Err(TensorError::IdxOutOfBounds);
+                }
+                Ok(bidx as usize)
             }
         },
         Idx::Item => {
@@ -299,6 +303,62 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Slice {
+    pub start: Option<usize>,
+    pub end: Option<usize>,
+    pub step: Option<isize>,
+}
+
+impl Slice {
+    pub fn new(start: Option<usize>, end: Option<usize>, step: Option<isize>) -> Self {
+        Slice { start, end, step }
+    }
+
+    pub fn full() -> Self {
+        Slice { start: None, end: None, step: None }
+    }
+
+    pub fn step(mut self, step: isize) -> Self {
+        self.step = Some(step);
+        self
+    }
+
+    pub fn start(mut self, start: usize) -> Self {
+        self.start = Some(start);
+        self
+    }
+
+    pub fn end(mut self, end: usize) -> Self {
+        self.end = Some(end);
+        self
+    }
+}
+
+impl<R> From<R> for Slice 
+where R: RangeBounds<usize>
+{
+    fn from(range: R) -> Self {
+        let start = match range.start_bound() {
+            std::ops::Bound::Included(&s) => Some(s),
+            std::ops::Bound::Excluded(&s) => Some(s + 1),
+            std::ops::Bound::Unbounded    => None,
+        };
+
+        let end = match range.end_bound() {
+            std::ops::Bound::Included(&e) => Some(e + 1),
+            std::ops::Bound::Excluded(&e) => Some(e),
+            std::ops::Bound::Unbounded    => None,
+        };
+
+        Slice {
+            start: start,
+            end: end,
+            step: None,
+        }
+    }
+}
+
 /// Computes the new shape, stride, and offset for a view obtained by fixing
 /// the dimension `dim` to index `idx`.
 ///
@@ -309,59 +369,79 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Stride, offset: usize) -> Result<us
 /// Errors
 /// - `InvalidDim` if `dim` is out of bounds.
 /// - `IdxOutOfBounds` if `idx >= shape[dim]`.
-fn compute_sliced_parameters<R>(
+fn compute_sliced_parameters(
     shape: &Shape,
     stride: &Stride,
     offset: usize,
     dim: usize,
-    idx: R
+    slice: impl Into<Slice>
 ) -> Result<(Shape, Stride, usize), TensorError>
-where
-    R: RangeBounds<Dim>,
 {
+    let slice:  Slice = slice.into();
+
     if dim >= shape.len() {
         return Err(TensorError::InvalidDim);
     }
-    let len = shape[dim];
-
-    let start = match idx.start_bound() {
-        std::ops::Bound::Included(&s) => s,
-        std::ops::Bound::Excluded(&s) => s + 1,
-        std::ops::Bound::Unbounded    => 0,
-    };
-
-    let end = match idx.end_bound() {
-        std::ops::Bound::Included(&e) => e + 1,
-        std::ops::Bound::Excluded(&e) => e,
-        std::ops::Bound::Unbounded    => len,
-    };
     
-    if start >= len || end > len {
+    let step: isize = slice.step.unwrap_or(1);
+    if step == 0 {
+        return Err(TensorError::InvalidShape);
+    }
+
+    let start: isize = match slice.start {
+        Some(s) => s as isize,
+        None if step > 0 => 0,
+        None if step < 0 => (shape[dim] as isize) - 1, // end inclusive
+        _ => unreachable!(),
+    };
+
+    let end: isize = match slice.end {
+        Some(e) => e as isize,
+        None if step > 0 => shape[dim] as isize,
+        None if step < 0 => -1, // start exclusive
+        _ => unreachable!(),
+    };
+
+    // range check
+    if step > 0 && (start < 0 || start >= shape[dim] as isize || end < 0 || end > shape[dim] as isize) {
         return Err(TensorError::IdxOutOfBounds);
     }
 
-    if start > end {
+    if step < 0 && (start < 0 || start >= shape[dim] as isize || end < -1 || end >= shape[dim] as isize) {
         return Err(TensorError::IdxOutOfBounds);
     }
 
-    // Compute new shape + stride + offset
-    if start == end {
-        // collapse
+    let len: usize = {
+        if (step > 0 && start >= end) || (step < 0 && start <= end) {
+            0
+        } else {
+            let dist = (start - end).abs() - 1;
+            (dist as usize / step.abs() as usize) + 1
+        }
+    };
+
+    if len == 0 {
+        // collapse to empty slice
         let mut new_shape = shape.clone();
-        new_shape.remove(dim);
         let mut new_stride = stride.clone();
+        new_shape.remove(dim);
         new_stride.remove(dim);
-        let new_offset = offset + stride[dim] * start;
-        Ok((new_shape, new_stride, new_offset))
-    } else {
-        // maintain
-        let mut new_shape = shape.clone();
-        new_shape[dim] = end - start;
 
-        let new_stride = stride.clone();
-        let new_offset = offset + stride[dim] * start;
-
-        Ok((new_shape, new_stride, new_offset))
+        let clamped_start = start.clamp(0, (shape[dim] - 1) as isize);
+        let new_offset = offset + (clamped_start * stride[dim]).max(0) as usize;
+        return Ok((new_shape, new_stride, new_offset));
     }
+
+    let clamped_start = start.clamp(0, (shape[dim] - 1) as isize) as usize;
+    let new_offset = offset + (clamped_start as isize * stride[dim]) as usize;
+
+    let mut new_shape = shape.clone();
+    let mut new_stride = stride.clone();
+
+    new_shape[dim] = len;
+    new_stride[dim] = (stride[dim] * step).abs();
+
+    Ok((new_shape, new_stride, new_offset))
+    
 }
 

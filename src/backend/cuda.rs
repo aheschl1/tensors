@@ -230,7 +230,7 @@ impl<T: TensorValueElementwise + DeviceRepr + 'static> BackendUnaryElementwise<T
         &self, buf: &mut Self::Buf, 
         op: &ElementwiseTensorOp<T>, 
         start: usize,
-        stride: usize,
+        stride: isize,
         len: usize
     ) -> Result<(), TensorError> {
 

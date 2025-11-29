@@ -914,7 +914,14 @@ mod tests {
         // This removes the middle dimension, leaving shape [2, 4]
         let mut view = tensor.view_mut();
         let mut slice = view.slice_mut(1, 1..1).unwrap(); // Middle "row" at each depth level
+        // make sure that the stride and all is expected
+        assert_eq!(*slice.shape(), vec![2, 4]);
+        assert!(!slice.is_contiguous(), "Slice should be non-contiguous");
+        assert_eq!(*slice.stride(), vec![12, 1]); // Original strides were [12,4,1]
+        assert_eq!(slice.offset(), 4); // Starting at index 4 in flat array
+
         slice += 100;
+
         
         // Original data is laid out as:
         // Depth 0: [[1,2,3,4], [5,6,7,8], [9,10,11,12]]
@@ -928,6 +935,27 @@ mod tests {
         }
         
         assert_eq!(tensor.raw, expected_data.into_boxed_slice());
+    }
+    #[test]
+    fn test_3d_noncontiguous_slice_view() {
+        let data: Vec<i32> = (1..=24).collect();
+        let mut tensor = TensorBase::<Cpu, i32>::from_buf(data, vec![2, 3, 4]).unwrap();
+        
+        // Slice along middle dimension at index 1 (middle row)
+        // Shape is [2, 3, 4] - we're slicing dim 1 at idx 1
+        // This removes the middle dimension, leaving shape [2, 4]
+        let view = tensor.view_mut();
+        let slice = view.slice(1, 1..1).unwrap(); // Middle "row" at each depth level
+        
+        let expected_data: Vec<i32> = vec![5, 6, 7, 8, 17, 18, 19, 20];
+        let mut actual_data: Vec<i32> = Vec::new();
+        for i in 0..slice.size() {
+            // shape is [2,4] => size 8
+            let idx = vec![i / 4, i % 4]; // Map flat index to 2D indices
+            actual_data.push(slice.get(idx).unwrap());
+        }
+
+        assert_eq!(actual_data, expected_data);
     }
 
     // --- 4D and 5D Tensor Tests ---
@@ -1568,8 +1596,7 @@ mod cuda_tests {
         for &idx in &indices {
             let value = view.get(vec![idx]).unwrap();
             let expected = (idx as f32 * 0.5) * 2.0;
-            assert!((value - expected).abs() < 1e-5, 
-                "Mismatch at index {}: got {}, expected {}", idx, value, expected);
+            assert!((value - expected).abs() < 1e-5, "Mismatch at index {}: got {}, expected {}", idx, value, expected);
         }
     }
 
@@ -2306,9 +2333,11 @@ mod cuda_tests {
         // Slice along middle dimension at index 1 (middle row)
         let mut view = tensor.view_mut();
         let mut slice = view.slice_mut(1, 1..1).unwrap(); // Middle "row" at each depth level
-        slice += 100;
+        slice += 100; // in og view, this is skipping first 8 and last 8 elements. impacts 8 elements total
+        assert_eq!(*slice.shape(), vec![2, 4]);
         
         // Indices affected: 5-8, 17-20 (middle row of each depth, 1-indexed becomes 4-7, 16-19 in 0-indexed)
+        // first row skipped, second row hit, third row skipped fourth row skipped fifth row hit sixth row skipped
         let mut expected_data: Vec<i32> = (1..=24).collect();
         for i in [5, 6, 7, 8, 17, 18, 19, 20].iter() {
             expected_data[i - 1] += 100;

@@ -78,14 +78,15 @@ impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu
         &self, buf: &mut Self::Buf, 
         op: &ElementwiseTensorOp<T>, 
         start: usize,
-        stride: usize,
+        stride: isize,
         len: usize
     ) -> Result<(), TensorError> {
+
         let bufptr = buf.as_mut();
         let mut idx = start;
         for _ in 0..len {
             bufptr[idx] = op.apply(bufptr[idx]);
-            idx += stride;
+            idx = (idx as isize + stride) as usize;
         }
         Ok(())
     }

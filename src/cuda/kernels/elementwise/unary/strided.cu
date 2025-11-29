@@ -4,7 +4,7 @@ template <typename T>
 __global__ void elementwise_strided_kernel(
     T* __restrict__ data,
     size_t start,
-    size_t stride,
+    ptrdiff_t stride,
     size_t len,
     uint8_t op,
     T value
@@ -13,7 +13,7 @@ __global__ void elementwise_strided_kernel(
          i < len;
          i += blockDim.x * gridDim.x) {
 
-        size_t idx = start + i * stride;
+        size_t idx = (size_t)((ptrdiff_t)start + (ptrdiff_t)i * stride);
         T x = data[idx];
         switch (op) {
             case OP_ADD: data[idx] = x + value; break;
@@ -27,7 +27,7 @@ template <typename T>
 void launch_elementwise_strided_op(
     T* data,
     size_t start,
-    size_t stride,
+    ptrdiff_t stride,
     size_t len,
     uint8_t op,
     T value,
@@ -41,7 +41,7 @@ void launch_elementwise_strided_op(
 
 #define DECLARE_ELEMENTWISE_STRIDED_LAUNCHER(TYPE, SUFFIX) \
     extern "C" void launch_elementwise_strided_##SUFFIX( \
-        TYPE* data, size_t start, size_t stride, size_t len, uint8_t op, TYPE value, unsigned int block_size \
+        TYPE* data, size_t start, ptrdiff_t stride, size_t len, uint8_t op, TYPE value, unsigned int block_size \
     ) { \
         launch_elementwise_strided_op<TYPE>(data, start, stride, len, op, value, block_size); \
     }
