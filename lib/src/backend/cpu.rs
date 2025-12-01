@@ -1,5 +1,5 @@
 
-use crate::{backend::{Backend, BackendUnaryElementwise}, core::{meta::TensorOffsetIterator, tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::unary::ElementwiseTensorOp};
+use crate::{backend::{Backend, BackendBinaryElementwise, BackendUnaryElementwise}, core::{meta::TensorOffsetIterator, tensor::TensorError, value::{TensorValue, TensorValueElementwise}, MetaTensor}, ops::{binary::ElementwiseBinaryTensorOp, unary::ElementwiseUnaryTensorOp}};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Cpu;
@@ -63,7 +63,7 @@ impl<T: TensorValue> Backend<T> for Cpu {
 impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu {
     fn apply_elementwise_contiguous(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         start: usize,
         len: usize
     ) -> Result<(), TensorError> {
@@ -76,7 +76,7 @@ impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu
     
     fn apply_elementwise_1d_strided(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         offset: usize,
         stride: isize,
         len: usize
@@ -93,7 +93,7 @@ impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu
     fn apply_elementwise_nd(
         &self,
         buf: &mut Self::Buf,
-        op: &ElementwiseTensorOp<T>,
+        op: &ElementwiseUnaryTensorOp<T>,
         offset: usize,
         shape: &[usize],
         stride: &[isize],
@@ -111,16 +111,31 @@ impl<T: TensorValue + TensorValueElementwise> BackendUnaryElementwise<T> for Cpu
     }
 }
 
-// impl<T> BackendBinaryElementwise<T> for Cpu 
-// where T: TensorValue + TensorValueElementwise
-// {
-//     fn merge(
-//         &self, 
-//         left: (&Self::Buf, &[crate::core::meta::MemRegion]), 
-//         right: (&Self::Buf, &[crate::core::meta::MemRegion]),
-//         dst: (&mut Self::Buf, &[crate::core::meta::MemRegion]),
-//         op: ElementwiseTensorOp<T>
-//     ) -> Result<(), TensorError> {
-//         todo!()
-//     }
-// }
+impl<T> BackendBinaryElementwise<T> for Cpu 
+where T: TensorValueElementwise
+{
+    fn merge(
+        &self, 
+        left: (&Self::Buf, &MetaTensor), 
+        right: (&Self::Buf, &MetaTensor),
+        dst: (&mut Self::Buf, &MetaTensor),
+        op: ElementwiseBinaryTensorOp<T>
+    ) -> Result<(), TensorError> {
+        let (left_buf, left_meta) = left;
+        let (right_buf, right_meta) = right;
+        let (dst_buf, dst_meta) = dst;
+
+        for out_offset in dst_meta.iter_offsets() {
+            let left_offset = left_meta.ith_offset(out_offset);
+            let right_offset = right_meta.ith_offset(out_offset);
+
+            let a = left_buf[left_offset];
+            let b = right_buf[right_offset];
+
+            dst_buf[out_offset] = op.apply(a, b);
+
+        }
+
+        Ok(())
+    }
+}

@@ -2,7 +2,7 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc, LazyLock};
 
 use cudarc::driver::{CudaContext, CudaSlice, DevicePtr, DeviceRepr};
 
-use crate::{backend::{Backend, BackendUnaryElementwise}, core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::unary::ElementwiseTensorOp};
+use crate::{backend::{Backend, BackendUnaryElementwise}, core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}}, ops::unary::ElementwiseUnaryTensorOp};
 
 // Include bindgen-generated FFI declarations for CUDA kernel launchers
 #[allow(non_camel_case_types)]
@@ -176,7 +176,7 @@ impl<T: TensorValueElementwise + DeviceRepr> BackendUnaryElementwise<T> for Cuda
     
     fn apply_elementwise_contiguous(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         start: usize,
         len: usize
     ) -> Result<(), TensorError> {
@@ -229,7 +229,7 @@ impl<T: TensorValueElementwise + DeviceRepr> BackendUnaryElementwise<T> for Cuda
     
     fn apply_elementwise_1d_strided(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         start: usize,
         stride: isize,
         len: usize
@@ -282,7 +282,7 @@ impl<T: TensorValueElementwise + DeviceRepr> BackendUnaryElementwise<T> for Cuda
     fn apply_elementwise_nd(
         &self,
         buf: &mut Self::Buf,
-        op: &ElementwiseTensorOp<T>,
+        op: &ElementwiseUnaryTensorOp<T>,
         offset: usize,
         shape: &[usize],
         stride: &[isize],

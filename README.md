@@ -18,7 +18,9 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [ ] x86 SIMD paths (currently relying on llvm auto-vectorization for CPU which only works for contiguous memory)
 - [ ] Multiple gpu devices allowed
 - [X] Do not lock thread on GPU dispatch
-- [ ] strides and offset as bytes 
+- [ ] strides and offset as bytes  
+- [ ] Broadcasting
+- [ ] Idx should not be ref. makes it less ergonomic
 
 ## to optimize
 

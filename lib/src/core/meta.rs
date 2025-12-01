@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use crate::{backend::Backend, core::{primitives::TensorBase, value::TensorValue, TensorViewMut}};
+use crate::{backend::Backend, core::{idx, primitives::TensorBase, value::TensorValue, TensorViewMut}};
 
 use super::primitives::TensorView;
 
@@ -101,6 +101,23 @@ impl MetaTensor {
     pub fn iter_offsets(&self) -> impl Iterator<Item = usize> + '_ {
         let offset = self.offset;
         TensorOffsetIterator::new(self.shape.as_slice(), self.stride.as_slice(), offset)
+    }
+    pub fn ith_offset(&self, i: usize) -> usize {
+        let mut idx = i;
+        let mut coords = vec![0; self.rank()];
+
+        for d in (0..self.rank()).rev() {
+            let dim = self.shape[d];
+            coords[d] = idx % dim;
+            idx /= dim;
+        }
+
+        let mut offset = self.offset as isize;
+        for (c, stride) in coords.iter().zip(self.stride.iter()) {
+            offset += *c as isize * *stride;
+        }
+
+        offset as usize
     }
 }
 

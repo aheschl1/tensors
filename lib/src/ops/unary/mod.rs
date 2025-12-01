@@ -4,7 +4,7 @@ pub mod add;
 pub mod sub;
 pub mod mul;
 
-pub enum ElementwiseTensorOp<T> 
+pub enum ElementwiseUnaryTensorOp<T> 
 where T: TensorValue
 {
     Add(T),
@@ -12,38 +12,38 @@ where T: TensorValue
     Mul(T),
 }
 
-impl<T> ElementwiseTensorOp<T> 
+impl<T> ElementwiseUnaryTensorOp<T> 
 where T: std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::ops::Mul<Output = T> + TensorValue
 {
     #[inline(always)]
     pub fn apply(&self, x: T) -> T {
         match self {
-            ElementwiseTensorOp::Add(val) => x + *val,
-            ElementwiseTensorOp::Sub(val) => x - *val,
-            ElementwiseTensorOp::Mul(val) => x * *val,
+            ElementwiseUnaryTensorOp::Add(val) => x + *val,
+            ElementwiseUnaryTensorOp::Sub(val) => x - *val,
+            ElementwiseUnaryTensorOp::Mul(val) => x * *val,
         }
     }
 }
 
 #[cfg(feature = "cuda")]
-impl<T> ElementwiseTensorOp<T>
+impl<T> ElementwiseUnaryTensorOp<T>
 where T: TensorValue
 {
     /// Convert operation to op code (0=Add, 1=Sub, 2=Mul)
     pub fn to_op_code(&self) -> u8 {
         match self {
-            ElementwiseTensorOp::Add(_) => 0,
-            ElementwiseTensorOp::Sub(_) => 1,
-            ElementwiseTensorOp::Mul(_) => 2,
+            ElementwiseUnaryTensorOp::Add(_) => 0,
+            ElementwiseUnaryTensorOp::Sub(_) => 1,
+            ElementwiseUnaryTensorOp::Mul(_) => 2,
         }
     }
 
     /// Get the operation value
     pub fn value(&self) -> T {
         match self {
-            ElementwiseTensorOp::Add(v) => *v,
-            ElementwiseTensorOp::Sub(v) => *v,
-            ElementwiseTensorOp::Mul(v) => *v,
+            ElementwiseUnaryTensorOp::Add(v) => *v,
+            ElementwiseUnaryTensorOp::Sub(v) => *v,
+            ElementwiseUnaryTensorOp::Mul(v) => *v,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, ops::{Add, AddAssign}};
 
-use crate::{backend::BackendUnaryElementwise, core::{primitives::TensorBase, tensor::AsTensor, value::{TensorValue, TensorValueElementwise}, TensorView, TensorViewMut}, ops::unary::ElementwiseTensorOp};
+use crate::{backend::BackendUnaryElementwise, core::{primitives::TensorBase, tensor::AsTensor, value::{TensorValue, TensorValueElementwise}, TensorView, TensorViewMut}, ops::unary::ElementwiseUnaryTensorOp};
 
 impl<'a, T, B, O> AddAssign<O> for TensorViewMut<'a, T, B> 
     where T: TensorValueElementwise + TensorValue,
@@ -10,7 +10,7 @@ impl<'a, T, B, O> AddAssign<O> for TensorViewMut<'a, T, B>
     fn add_assign(&mut self, rhs: O) {
         self.backend.apply_elementwise(
             self.raw, 
-            ElementwiseTensorOp::Add(*rhs.borrow()),
+            ElementwiseUnaryTensorOp::Add(*rhs.borrow()),
             &self.meta
         ).unwrap();
     }
@@ -24,7 +24,7 @@ impl<T, B, O> AddAssign<O> for TensorBase<T, B>
     fn add_assign(&mut self, rhs: O) {
         self.backend.apply_elementwise(
             &mut self.raw, 
-            ElementwiseTensorOp::Add(*rhs.borrow()),
+            ElementwiseUnaryTensorOp::Add(*rhs.borrow()),
             &self.meta
         ).unwrap();
     }
