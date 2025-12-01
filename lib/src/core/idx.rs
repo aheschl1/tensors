@@ -75,3 +75,18 @@ impl<'a> From<()> for Idx<'a> {
         Idx::Item
     }
 }
+
+// impl<'a> From<(usize, usize)> for Idx<'a> {
+//     /// Converts a 2-D coordinate tuple into a multi-dimensional index.
+//     fn from(value: (usize, usize)) -> Self {
+//         Idx::Coord(&[value.0, value.1])
+//     }
+// }
+
+// impl<'a> From<(usize, usize, usize)> for Idx<'a> {
+//     /// Converts a 3-D coordinate tuple into a multi-dimensional index.
+//     fn from(value: (usize, usize, usize)) -> Self {
+//         Idx::Coord(&[value.0, value.1, value.2])
+//     }
+// }
+

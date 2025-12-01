@@ -23,6 +23,9 @@ pub enum TensorError {
     #[error("backend error: {0}")]
     BackendError(String),
 
+    #[error("broadcast error: {0}")]
+    BroadcastError(String),
+
     #[cfg(feature = "cuda")]
     #[error("cuda error: {0}")]
     CudaError(String),

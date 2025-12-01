@@ -1,6 +1,6 @@
 
 
-use crate::{core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}, MetaTensor, MetaTensorView}, ops::unary::ElementwiseTensorOp};
+use crate::{core::{tensor::TensorError, value::{TensorValue, TensorValueElementwise}, MetaTensor, MetaTensorView}, ops::{binary::ElementwiseBinaryTensorOp, unary::ElementwiseUnaryTensorOp}};
 
 pub mod cpu;
 
@@ -26,14 +26,14 @@ pub trait Backend<T: TensorValue> {
 pub trait BackendUnaryElementwise<T: TensorValue + TensorValueElementwise>: Backend<T> {
     fn apply_elementwise_contiguous(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         start: usize,
         len: usize
     ) -> Result<(), TensorError>;
 
     fn apply_elementwise_1d_strided(
         &self, buf: &mut Self::Buf, 
-        op: &ElementwiseTensorOp<T>, 
+        op: &ElementwiseUnaryTensorOp<T>, 
         offset: usize,
         stride: isize,
         len: usize
@@ -42,13 +42,13 @@ pub trait BackendUnaryElementwise<T: TensorValue + TensorValueElementwise>: Back
     fn apply_elementwise_nd(
         &self,
         buf: &mut Self::Buf,
-        op: &ElementwiseTensorOp<T>,
+        op: &ElementwiseUnaryTensorOp<T>,
         offset: usize,
         shape: &[usize],
         stride: &[isize],
     ) -> Result<(), TensorError>;
 
-    fn apply_elementwise(&self, buf: &mut Self::Buf, op: ElementwiseTensorOp<T>, meta: &MetaTensor) -> Result<(), TensorError>{
+    fn apply_elementwise(&self, buf: &mut Self::Buf, op: ElementwiseUnaryTensorOp<T>, meta: &MetaTensor) -> Result<(), TensorError>{
         if meta.is_contiguous() {
             return self.apply_elementwise_contiguous(buf, &op, meta.offset, meta.size())
         }
@@ -80,23 +80,12 @@ pub trait BackendUnaryElementwise<T: TensorValue + TensorValueElementwise>: Back
 }
 
 pub trait BackendBinaryElementwise<T: TensorValue + TensorValueElementwise>: Backend<T> {
-    // / Rules of the merge operation:
-    // / - left and right regions, when combined, cover the same number of indices
-    // / - left and right regions, when combined, cover the same number of indices as the dst regions
-    // / - dst addresses do not overlap with left or right addresses
-    // / 
-    // / In general, broadcasting rukes with regard to shape are:
-    // / Traversing from most minor to most major dimension:
-    // / - if dimensions are equal, they align
-    // / - if one dimension is 1, it is broadcast to the other dimension
-    // / - if one dimension is missing, it is treated as 1 and broadcast to the other dimension
-    // / 
-    // / The memory layouts can be arbitrary, as long as the above rules are followed.
-    // fn merge(
-    //     &self, 
-    //     left: (&Self::Buf, &[MemRegion]), 
-    //     right: (&Self::Buf, &[MemRegion]),
-    //     dst: (&mut Self::Buf, &[MemRegion]),
-    //     op: ElementwiseTensorOp<T>
-    // ) -> Result<(), TensorError>;
+
+    fn merge(
+        &self, 
+        left: (&Self::Buf, &MetaTensor), 
+        right: (&Self::Buf, &MetaTensor),
+        dst: (&mut Self::Buf, &MetaTensor),
+        op: ElementwiseBinaryTensorOp<T>
+    ) -> Result<(), TensorError>;
 }
