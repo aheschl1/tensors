@@ -7,16 +7,16 @@ pub mod value;
 pub mod slice;
 
 pub use meta::{Dim, Shape, Stride, MetaTensor, MetaTensorView, shape_to_stride};
-pub use primitives::{CpuTensor, TensorView, CpuTensorView, TensorViewMut};
+pub use primitives::{Tensor, TensorView, CpuTensorView, TensorViewMut};
 pub use slice::Slice;
 
 
 #[cfg(test)]
 mod tests {
-    use crate::{backend::Backend, core::{idx::Idx, value::TensorValue, tensor::{AsTensor, AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, CpuTensor, MetaTensor, MetaTensorView, Shape, Stride, Slice}};
+    use crate::{backend::Backend, core::{idx::Idx, value::TensorValue, tensor::{AsTensor, AsView, AsViewMut, TensorAccess, TensorAccessMut, TensorError}, Tensor, MetaTensor, MetaTensorView, Shape, Stride, Slice}};
 
-    fn make_tensor<T: TensorValue>(buf: Vec<T>, shape: impl Into<Shape>) -> CpuTensor<T> {
-        CpuTensor::from_buf(buf, shape.into()).unwrap()
+    fn make_tensor<T: TensorValue>(buf: Vec<T>, shape: impl Into<Shape>) -> Tensor<T> {
+        Tensor::from_buf(buf, shape.into()).unwrap()
     }
 
     #[test]
@@ -834,7 +834,7 @@ mod tests {
 
     #[test]
     fn test_column() {
-    let tensor = CpuTensor::column(vec![1, 2, 3]);
+    let tensor = Tensor::column(vec![1, 2, 3]);
     assert_eq!(*tensor.shape(), vec![3]);
         assert_eq!(index_tensor(Idx::At(0), &tensor.view()).unwrap(), 1);
         assert_eq!(index_tensor(Idx::At(1), &tensor.view()).unwrap(), 2);
@@ -843,7 +843,7 @@ mod tests {
 
     #[test]
     fn test_row() {
-    let tensor = CpuTensor::row(vec![1, 2, 3]);
+    let tensor = Tensor::row(vec![1, 2, 3]);
     assert_eq!(*tensor.shape(), vec![1, 3]);
         assert_eq!(index_tensor(Idx::Coord(&[0, 0]), &tensor.view()).unwrap(), 1);
         assert_eq!(index_tensor(Idx::Coord(&[0, 1]), &tensor.view()).unwrap(), 2);
@@ -860,7 +860,7 @@ mod tests {
 
         assert_eq!(index_tensor(Idx::Item, &tensor.view()).unwrap(), 42);
         assert!(tensor.is_scalar());
-        assert_eq!(CpuTensor::scalar(42), tensor);
+        assert_eq!(Tensor::scalar(42), tensor);
     }
 
     #[test]
@@ -1066,7 +1066,7 @@ mod tests {
         let buf = vec![1, 2, 3, 4];
         let shape = vec![2, 3];
         assert!(matches!(
-            CpuTensor::from_buf(buf, shape),
+            Tensor::from_buf(buf, shape),
             Err(TensorError::InvalidShape)
         ));
     }
@@ -1168,9 +1168,9 @@ mod tests {
 
     #[test]
     fn test_is_row_and_is_column() {
-        let row = CpuTensor::row(vec![1, 2, 3]);
-        let col = CpuTensor::column(vec![1, 2, 3]);
-        let scalar = CpuTensor::scalar(10);
+        let row = Tensor::row(vec![1, 2, 3]);
+        let col = Tensor::column(vec![1, 2, 3]);
+        let scalar = Tensor::scalar(10);
         assert!(row.is_row());
         assert!(!row.is_column());
         assert!(!col.is_row());
@@ -1182,7 +1182,7 @@ mod tests {
 
     #[test]
     fn test_slice_scalar_error() {
-        let scalar = CpuTensor::scalar(5);
+        let scalar = Tensor::scalar(5);
         assert!(matches!(scalar.view().slice(0, 0..0), Err(TensorError::InvalidDim)));
     }
 
@@ -1210,7 +1210,7 @@ mod tests {
 
     #[test]
     fn test_from_buf_empty_shape_error() {
-        assert!(matches!(CpuTensor::from_buf(Vec::<i32>::new(), vec![]), Err(TensorError::InvalidShape)));
+        assert!(matches!(Tensor::from_buf(Vec::<i32>::new(), vec![]), Err(TensorError::InvalidShape)));
     }
 
     // #[test]
@@ -1258,7 +1258,7 @@ mod tests {
     // --- Additional metadata coverage tests ---
     #[test]
     fn test_meta_dims_and_dim() {
-        let scalar = CpuTensor::scalar(10);
+        let scalar = Tensor::scalar(10);
         assert_eq!(scalar.dims(), 0);
 
         let vec = make_tensor(vec![1, 2, 3], vec![3]);
@@ -1279,7 +1279,7 @@ mod tests {
 
     #[test]
     fn test_meta_size() {
-        let scalar = CpuTensor::scalar(42);
+        let scalar = Tensor::scalar(42);
         assert_eq!(scalar.size(), 1);
 
         let vec = make_tensor(vec![1, 2, 3, 4], vec![4]);
@@ -1484,7 +1484,7 @@ mod tests {
 
     #[test]
     fn test_instantiation() {
-        let tensor = CpuTensor::<f32>::zeros((1, 1));
+        let tensor = Tensor::<f32>::zeros((1, 1));
 
         assert_eq!(*tensor.shape(), vec![1, 1]);
         assert_eq!(tensor.raw.len(), 1);

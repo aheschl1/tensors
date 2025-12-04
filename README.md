@@ -23,6 +23,7 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [ ] Idx should not be ref. makes it less ergonomic
 - [ ] Pull out ops into crate defined traits, which return Result, and call that from Add and AddAssign impls (panic there)
 - [ ] Figure outt bool types, and in general those without Add, Sub, and Mul impls
+- [ ] Allow step_by for slicing iterator
 
 ## to optimize
 
@@ -35,13 +36,6 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [X] perf sucks for non-contiguous memory in unary CUDA - fix
 - [ ] O(rank * size) instead of O(size) broadcasting ops is bad
 - [ ] Broadcast cuda kernel puts a cap on tensor dim size - fix
-
-## missing tests
-
-- [ ] broadcasting large tensor
-- [ ] broadcasting scalar
-- [ ] brooadcast after sliceing
-- [ ] broadcast after negative step slicing
 
 ## Some examples
 

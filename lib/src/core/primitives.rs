@@ -32,7 +32,7 @@ impl<B: Backend<T>, T: TensorValue> Clone for TensorBase<T, B> {
 /// Holds the backing buffer and the associated layout metadata. The `offset`
 /// in `meta` is expected to be zero for owned tensors created via
 /// `from_buf`/`row`/`column`/`scalar`.
-pub type CpuTensor<T> = TensorBase<T, Cpu>;
+pub type Tensor<T> = TensorBase<T, Cpu>;
 
 #[cfg(feature = "cuda")]
 pub type CudaTensor<T> = TensorBase<T, crate::backend::cuda::Cuda>;
@@ -40,16 +40,16 @@ pub type CudaTensor<T> = TensorBase<T, crate::backend::cuda::Cuda>;
 #[cfg(feature = "cuda")]
 impl<T: TensorValue> CudaTensor<T> {
     /// Transfers this tensor from the CUDA backend to a CPU tensor.
-    pub fn cpu(&self) -> Result<CpuTensor<T>, TensorError> {
+    pub fn cpu(&self) -> Result<Tensor<T>, TensorError> {
         let cpu_backend = Cpu;
         let cpu_buffer = self.backend.dump(&self.raw)?;
-        let cpu = CpuTensor::from_parts(cpu_backend, cpu_buffer, self.meta.clone());
+        let cpu = Tensor::from_parts(cpu_backend, cpu_buffer, self.meta.clone());
         Ok(cpu)
     }
 }
 
 #[cfg(feature = "cuda")]
-impl<T: TensorValue> CpuTensor<T> {
+impl<T: TensorValue> Tensor<T> {
     /// Transfers this tensor from the CPU backend to a CUDA tensor.
     pub fn cuda(&self) -> Result<CudaTensor<T>, TensorError> {
         let cuda_backend = crate::backend::cuda::Cuda::construct(0)?;
