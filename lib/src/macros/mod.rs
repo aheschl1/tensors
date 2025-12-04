@@ -16,13 +16,13 @@ macro_rules! tset {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{tensor::{AsView, AsViewMut}, value::TensorValue, CpuTensor, Shape};
+    use crate::core::{tensor::{AsView, AsViewMut}, value::TensorValue, Tensor, Shape};
     use crate::core::tensor::{TensorAccess, TensorAccessMut};
     use crate::core::idx::Idx;
 
 
-    fn make_tensor<T: TensorValue>(buf: Vec<T>, shape: impl Into<Shape>) -> CpuTensor<T> {
-        CpuTensor::from_buf(buf, shape).unwrap()
+    fn make_tensor<T: TensorValue>(buf: Vec<T>, shape: impl Into<Shape>) -> Tensor<T> {
+        Tensor::from_buf(buf, shape).unwrap()
     }
 
     #[test]

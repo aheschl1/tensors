@@ -4,9 +4,9 @@ pub mod binary;
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Add;
+    use std::{backtrace, ops::Add};
 
-    use crate::{backend::cpu::Cpu, core::{meta::MetaTensorView, primitives::TensorBase, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut}, CpuTensor}};
+    use crate::{backend::cpu::Cpu, core::{meta::MetaTensorView, primitives::TensorBase, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut}, Tensor, Slice}};
 
     
     #[test]
@@ -1140,8 +1140,8 @@ mod tests {
         // BROADCASTING TESTS
     #[test]
     fn test_broadcast_flipped() {
-        let mut veca = CpuTensor::<f32>::ones((1, 3));
-        let vecb = CpuTensor::<f32>::ones((3, 1));
+        let mut veca = Tensor::<f32>::ones((1, 3));
+        let vecb = Tensor::<f32>::ones((3, 1));
         veca.view_mut().set(vec![0, 0], 22.0).unwrap();
 
         let vecc = &veca.add(vecb.view());
@@ -1160,8 +1160,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_same() {
-        let mut veca = CpuTensor::<f32>::ones((3,1));
-        let vecb = CpuTensor::<f32>::ones((3, 1));
+        let mut veca = Tensor::<f32>::ones((3,1));
+        let vecb = Tensor::<f32>::ones((3, 1));
         veca.view_mut().set(vec![0, 0], 22.0).unwrap();
 
         let vecc = &veca.add(vecb.view());
@@ -1186,8 +1186,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_3d_scalar_to_tensor() {
-        let veca = CpuTensor::<f32>::from_buf(vec![5.0], vec![]).unwrap(); // scalar
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4));
+        let veca = Tensor::<f32>::from_buf(vec![5.0], vec![]).unwrap(); // scalar
+        let vecb = Tensor::<f32>::ones((2, 3, 4));
         
         let vecc = veca.add(vecb.view());
         
@@ -1203,8 +1203,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_3d_vector_along_last_dim() {
-        let veca = CpuTensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap(); // (3,)
-        let vecb = CpuTensor::<f32>::ones((2, 4, 3)); // (2, 4, 3)
+        let veca = Tensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap(); // (3,)
+        let vecb = Tensor::<f32>::ones((2, 4, 3)); // (2, 4, 3)
         
         let vecc = veca.add(vecb.view());
         
@@ -1221,8 +1221,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_3d_matrix_to_tensor() {
-        let veca = CpuTensor::<f32>::ones((3, 4)); // (3, 4)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
+        let veca = Tensor::<f32>::ones((3, 4)); // (3, 4)
+        let vecb = Tensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1238,8 +1238,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_3d_singleton_dims() {
-        let veca = CpuTensor::<f32>::ones((1, 3, 1)); // (1, 3, 1)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
+        let veca = Tensor::<f32>::ones((1, 3, 1)); // (1, 3, 1)
+        let vecb = Tensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1255,8 +1255,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_3d_prepend_dims() {
-        let veca = CpuTensor::<f32>::ones((3, 4)); // (3, 4)
-        let vecb = CpuTensor::<f32>::ones((5, 3, 4)); // (5, 3, 4)
+        let veca = Tensor::<f32>::ones((3, 4)); // (3, 4)
+        let vecb = Tensor::<f32>::ones((5, 3, 4)); // (5, 3, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1274,8 +1274,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_4d_vector_to_tensor() {
-        let veca = CpuTensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap(); // (2,)
-        let vecb = CpuTensor::<f32>::ones((3, 4, 5, 2)); // (3, 4, 5, 2)
+        let veca = Tensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap(); // (2,)
+        let vecb = Tensor::<f32>::ones((3, 4, 5, 2)); // (3, 4, 5, 2)
         
         let vecc = veca.add(vecb.view());
         
@@ -1293,8 +1293,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_4d_complex_singletons() {
-        let veca = CpuTensor::<f32>::ones((1, 1, 5, 1)); // (1, 1, 5, 1)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 5, 4)); // (2, 3, 5, 4)
+        let veca = Tensor::<f32>::ones((1, 1, 5, 1)); // (1, 1, 5, 1)
+        let vecb = Tensor::<f32>::ones((2, 3, 5, 4)); // (2, 3, 5, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1312,8 +1312,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_4d_3d_to_4d() {
-        let veca = CpuTensor::<f32>::ones((3, 5, 4)); // (3, 5, 4)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 5, 4)); // (2, 3, 5, 4)
+        let veca = Tensor::<f32>::ones((3, 5, 4)); // (3, 5, 4)
+        let vecb = Tensor::<f32>::ones((2, 3, 5, 4)); // (2, 3, 5, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1333,8 +1333,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_5d_scalar_to_tensor() {
-        let veca = CpuTensor::<f32>::from_buf(vec![100.0], vec![]).unwrap(); // scalar
-        let vecb = CpuTensor::<f32>::ones((2, 2, 2, 2, 2)); // (2, 2, 2, 2, 2)
+        let veca = Tensor::<f32>::from_buf(vec![100.0], vec![]).unwrap(); // scalar
+        let vecb = Tensor::<f32>::ones((2, 2, 2, 2, 2)); // (2, 2, 2, 2, 2)
         
         let vecc = veca.add(vecb.view());
         
@@ -1354,8 +1354,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_5d_multiple_singletons() {
-        let veca = CpuTensor::<f32>::ones((1, 2, 1, 3, 1)); // (1, 2, 1, 3, 1)
-        let vecb = CpuTensor::<f32>::ones((4, 2, 5, 3, 6)); // (4, 2, 5, 3, 6)
+        let veca = Tensor::<f32>::ones((1, 2, 1, 3, 1)); // (1, 2, 1, 3, 1)
+        let vecb = Tensor::<f32>::ones((4, 2, 5, 3, 6)); // (4, 2, 5, 3, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1369,8 +1369,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_2d_to_4d() {
-        let veca = CpuTensor::<f32>::ones((3, 4)); // (3, 4)
-        let vecb = CpuTensor::<f32>::ones((2, 5, 3, 4)); // (2, 5, 3, 4)
+        let veca = Tensor::<f32>::ones((3, 4)); // (3, 4)
+        let vecb = Tensor::<f32>::ones((2, 5, 3, 4)); // (2, 5, 3, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1388,8 +1388,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_1d_to_5d() {
-        let veca = CpuTensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap(); // (3,)
-        let vecb = CpuTensor::<f32>::ones((2, 4, 5, 6, 3)); // (2, 4, 5, 6, 3)
+        let veca = Tensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap(); // (3,)
+        let vecb = Tensor::<f32>::ones((2, 4, 5, 6, 3)); // (2, 4, 5, 6, 3)
         
         let vecc = veca.add(vecb.view());
         
@@ -1413,8 +1413,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_incompatible_dimensions_3d() {
-        let veca = CpuTensor::<f32>::ones((3, 4)); // (3, 4)
-        let vecb = CpuTensor::<f32>::ones((2, 5, 6)); // (2, 5, 6) - incompatible!
+        let veca = Tensor::<f32>::ones((3, 4)); // (3, 4)
+        let vecb = Tensor::<f32>::ones((2, 5, 6)); // (2, 5, 6) - incompatible!
         
         // This should panic because 4 != 6 and 3 != 5
         let _vecc = veca.add(vecb.view());
@@ -1423,8 +1423,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_incompatible_inner_dim() {
-        let veca = CpuTensor::<f32>::ones((5,)); // (5,)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 7)); // (2, 3, 7)
+        let veca = Tensor::<f32>::ones((5,)); // (5,)
+        let vecb = Tensor::<f32>::ones((2, 3, 7)); // (2, 3, 7)
         
         // Should fail because 5 != 7
         let _vecc = veca.add(vecb.view());
@@ -1433,8 +1433,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_incompatible_middle_dim() {
-        let veca = CpuTensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
-        let vecb = CpuTensor::<f32>::ones((2, 5, 4)); // (2, 5, 4)
+        let veca = Tensor::<f32>::ones((2, 3, 4)); // (2, 3, 4)
+        let vecb = Tensor::<f32>::ones((2, 5, 4)); // (2, 5, 4)
         
         // Should fail because middle dimension 3 != 5 and neither is 1
         let _vecc = veca.add(vecb.view());
@@ -1443,8 +1443,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_incompatible_4d() {
-        let veca = CpuTensor::<f32>::ones((2, 3, 4, 5)); // (2, 3, 4, 5)
-        let vecb = CpuTensor::<f32>::ones((2, 7, 4, 5)); // (2, 7, 4, 5)
+        let veca = Tensor::<f32>::ones((2, 3, 4, 5)); // (2, 3, 4, 5)
+        let vecb = Tensor::<f32>::ones((2, 7, 4, 5)); // (2, 7, 4, 5)
         
         // Should fail because 3 != 7
         let _vecc = veca.add(vecb.view());
@@ -1453,8 +1453,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_incompatible_5d_multiple() {
-        let veca = CpuTensor::<f32>::ones((1, 2, 3, 4, 5)); // (1, 2, 3, 4, 5)
-        let vecb = CpuTensor::<f32>::ones((6, 2, 7, 4, 5)); // (6, 2, 7, 4, 5)
+        let veca = Tensor::<f32>::ones((1, 2, 3, 4, 5)); // (1, 2, 3, 4, 5)
+        let vecb = Tensor::<f32>::ones((6, 2, 7, 4, 5)); // (6, 2, 7, 4, 5)
         
         // Should fail because 3 != 7 (dim 2)
         let _vecc = veca.add(vecb.view());
@@ -1463,8 +1463,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_broadcast_both_non_singleton_mismatch() {
-        let veca = CpuTensor::<f32>::ones((4, 5, 6)); // (4, 5, 6)
-        let vecb = CpuTensor::<f32>::ones((4, 3, 6)); // (4, 3, 6)
+        let veca = Tensor::<f32>::ones((4, 5, 6)); // (4, 5, 6)
+        let vecb = Tensor::<f32>::ones((4, 3, 6)); // (4, 3, 6)
         
         // Should fail because 5 != 3 and neither is 1
         let _vecc = veca.add(vecb.view());
@@ -1474,8 +1474,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_all_singletons() {
-        let veca = CpuTensor::<f32>::ones((1, 1, 1)); // (1, 1, 1)
-        let vecb = CpuTensor::<f32>::ones((5, 6, 7)); // (5, 6, 7)
+        let veca = Tensor::<f32>::ones((1, 1, 1)); // (1, 1, 1)
+        let vecb = Tensor::<f32>::ones((5, 6, 7)); // (5, 6, 7)
         
         let vecc = veca.add(vecb.view());
         
@@ -1486,8 +1486,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_identity() {
-        let veca = CpuTensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
-        let vecb = CpuTensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
+        let veca = Tensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
+        let vecb = Tensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
         
         let vecc = veca.add(vecb.view());
         
@@ -1503,8 +1503,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_alternating_singletons() {
-        let veca = CpuTensor::<f32>::ones((1, 4, 1, 6)); // (1, 4, 1, 6)
-        let vecb = CpuTensor::<f32>::ones((3, 1, 5, 1)); // (3, 1, 5, 1)
+        let veca = Tensor::<f32>::ones((1, 4, 1, 6)); // (1, 4, 1, 6)
+        let vecb = Tensor::<f32>::ones((3, 1, 5, 1)); // (3, 1, 5, 1)
         
         let vecc = veca.add(vecb.view());
         
@@ -1515,8 +1515,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_trailing_singleton() {
-        let veca = CpuTensor::<f32>::ones((3, 4, 1)); // (3, 4, 1)
-        let vecb = CpuTensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
+        let veca = Tensor::<f32>::ones((3, 4, 1)); // (3, 4, 1)
+        let vecb = Tensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
         
         let vecc = veca.add(vecb.view());
         
@@ -1532,8 +1532,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_leading_singleton() {
-        let veca = CpuTensor::<f32>::ones((1, 4, 5)); // (1, 4, 5)
-        let vecb = CpuTensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
+        let veca = Tensor::<f32>::ones((1, 4, 5)); // (1, 4, 5)
+        let vecb = Tensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
         
         let vecc = veca.add(vecb.view());
         
@@ -1551,8 +1551,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_2d_plus_3d() {
-        let veca = CpuTensor::<f32>::ones((4, 5)); // (4, 5)
-        let vecb = CpuTensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
+        let veca = Tensor::<f32>::ones((4, 5)); // (4, 5)
+        let vecb = Tensor::<f32>::ones((3, 4, 5)); // (3, 4, 5)
         
         let vecc = veca.add(vecb.view());
         
@@ -1562,8 +1562,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_1d_plus_4d() {
-        let veca = CpuTensor::<f32>::ones((7,)); // (7,)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4, 7)); // (2, 3, 4, 7)
+        let veca = Tensor::<f32>::ones((7,)); // (7,)
+        let vecb = Tensor::<f32>::ones((2, 3, 4, 7)); // (2, 3, 4, 7)
         
         let vecc = veca.add(vecb.view());
         
@@ -1573,8 +1573,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_singleton_expansion() {
-        let veca = CpuTensor::<f32>::ones((1, 5, 1)); // (1, 5, 1)
-        let vecb = CpuTensor::<f32>::ones((4, 5, 6)); // (4, 5, 6)
+        let veca = Tensor::<f32>::ones((1, 5, 1)); // (1, 5, 1)
+        let vecb = Tensor::<f32>::ones((4, 5, 6)); // (4, 5, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1584,8 +1584,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_prepending() {
-        let veca = CpuTensor::<f32>::ones((5, 6)); // (5, 6)
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4, 5, 6)); // (2, 3, 4, 5, 6)
+        let veca = Tensor::<f32>::ones((5, 6)); // (5, 6)
+        let vecb = Tensor::<f32>::ones((2, 3, 4, 5, 6)); // (2, 3, 4, 5, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1595,8 +1595,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_both_expand() {
-        let veca = CpuTensor::<f32>::ones((1, 4, 1, 6)); // (1, 4, 1, 6)
-        let vecb = CpuTensor::<f32>::ones((3, 1, 5, 6)); // (3, 1, 5, 6)
+        let veca = Tensor::<f32>::ones((1, 4, 1, 6)); // (1, 4, 1, 6)
+        let vecb = Tensor::<f32>::ones((3, 1, 5, 6)); // (3, 1, 5, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1606,8 +1606,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_scalar_expansion() {
-        let veca = CpuTensor::<f32>::from_buf(vec![42.0], vec![]).unwrap(); // scalar
-        let vecb = CpuTensor::<f32>::ones((2, 3, 4, 5, 6)); // (2, 3, 4, 5, 6)
+        let veca = Tensor::<f32>::from_buf(vec![42.0], vec![]).unwrap(); // scalar
+        let vecb = Tensor::<f32>::ones((2, 3, 4, 5, 6)); // (2, 3, 4, 5, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1617,8 +1617,8 @@ mod tests {
 
     #[test]
     fn test_broadcast_shape_complex_5d() {
-        let veca = CpuTensor::<f32>::ones((1, 1, 3, 1, 5)); // (1, 1, 3, 1, 5)
-        let vecb = CpuTensor::<f32>::ones((2, 4, 3, 6, 5)); // (2, 4, 3, 6, 5)
+        let veca = Tensor::<f32>::ones((1, 1, 3, 1, 5)); // (1, 1, 3, 1, 5)
+        let vecb = Tensor::<f32>::ones((2, 4, 3, 6, 5)); // (2, 4, 3, 6, 5)
         
         let vecc = veca.add(vecb.view());
         
@@ -1633,8 +1633,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_2d_pattern1() {
         // Classic row vs column vector
-        let mut veca = CpuTensor::<f32>::ones((1, 4)); // (1, 4) - row vector
-        let vecb = CpuTensor::<f32>::ones((3, 1)); // (3, 1) - column vector
+        let mut veca = Tensor::<f32>::ones((1, 4)); // (1, 4) - row vector
+        let vecb = Tensor::<f32>::ones((3, 1)); // (3, 1) - column vector
         veca.view_mut().set(vec![0, 0], 5.0).unwrap();
         veca.view_mut().set(vec![0, 1], 6.0).unwrap();
         
@@ -1653,8 +1653,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_2d_pattern2() {
         // Flipped from classic pattern
-        let mut veca = CpuTensor::<f32>::ones((4, 1)); // (4, 1) - column vector
-        let vecb = CpuTensor::<f32>::ones((1, 5)); // (1, 5) - row vector
+        let mut veca = Tensor::<f32>::ones((4, 1)); // (4, 1) - column vector
+        let vecb = Tensor::<f32>::ones((1, 5)); // (1, 5) - row vector
         veca.view_mut().set(vec![0, 0], 10.0).unwrap();
         veca.view_mut().set(vec![1, 0], 20.0).unwrap();
         
@@ -1673,8 +1673,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_3d_complementary() {
         // (1, 3, 1) and (2, 1, 4) -> (2, 3, 4)
-        let veca = CpuTensor::<f32>::ones((1, 3, 1)); // (1, 3, 1)
-        let vecb = CpuTensor::<f32>::ones((2, 1, 4)); // (2, 1, 4)
+        let veca = Tensor::<f32>::ones((1, 3, 1)); // (1, 3, 1)
+        let vecb = Tensor::<f32>::ones((2, 1, 4)); // (2, 1, 4)
         
         let vecc = veca.add(vecb.view());
         
@@ -1691,8 +1691,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_3d_alternating() {
         // (1, 4, 5) and (3, 1, 5) -> (3, 4, 5)
-        let mut veca = CpuTensor::<f32>::ones((1, 4, 5)); // (1, 4, 5)
-        let mut vecb = CpuTensor::<f32>::ones((3, 1, 5)); // (3, 1, 5)
+        let mut veca = Tensor::<f32>::ones((1, 4, 5)); // (1, 4, 5)
+        let mut vecb = Tensor::<f32>::ones((3, 1, 5)); // (3, 1, 5)
         veca.view_mut().set(vec![0, 0, 0], 100.0).unwrap();
         vecb.view_mut().set(vec![0, 0, 0], 200.0).unwrap();
         
@@ -1713,8 +1713,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_3d_partial_overlap() {
         // (5, 1, 3) and (1, 4, 3) -> (5, 4, 3)
-        let veca = CpuTensor::<f32>::ones((5, 1, 3)); // (5, 1, 3)
-        let vecb = CpuTensor::<f32>::ones((1, 4, 3)); // (1, 4, 3)
+        let veca = Tensor::<f32>::ones((5, 1, 3)); // (5, 1, 3)
+        let vecb = Tensor::<f32>::ones((1, 4, 3)); // (1, 4, 3)
         
         let vecc = veca.add(vecb.view());
         
@@ -1732,8 +1732,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_4d_zigzag() {
         // (1, 3, 1, 5) and (2, 1, 4, 1) -> (2, 3, 4, 5)
-        let veca = CpuTensor::<f32>::ones((1, 3, 1, 5)); // (1, 3, 1, 5)
-        let vecb = CpuTensor::<f32>::ones((2, 1, 4, 1)); // (2, 1, 4, 1)
+        let veca = Tensor::<f32>::ones((1, 3, 1, 5)); // (1, 3, 1, 5)
+        let vecb = Tensor::<f32>::ones((2, 1, 4, 1)); // (2, 1, 4, 1)
         
         let vecc = veca.add(vecb.view());
         
@@ -1746,8 +1746,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_4d_complex() {
         // (1, 1, 6, 7) and (5, 4, 1, 1) -> (5, 4, 6, 7)
-        let veca = CpuTensor::<f32>::ones((1, 1, 6, 7)); // (1, 1, 6, 7)
-        let vecb = CpuTensor::<f32>::ones((5, 4, 1, 1)); // (5, 4, 1, 1)
+        let veca = Tensor::<f32>::ones((1, 1, 6, 7)); // (1, 1, 6, 7)
+        let vecb = Tensor::<f32>::ones((5, 4, 1, 1)); // (5, 4, 1, 1)
         
         let vecc = veca.add(vecb.view());
         
@@ -1760,8 +1760,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_5d_checkerboard() {
         // (1, 2, 1, 3, 1) and (4, 1, 5, 1, 6) -> (4, 2, 5, 3, 6)
-        let veca = CpuTensor::<f32>::ones((1, 2, 1, 3, 1)); // (1, 2, 1, 3, 1)
-        let vecb = CpuTensor::<f32>::ones((4, 1, 5, 1, 6)); // (4, 1, 5, 1, 6)
+        let veca = Tensor::<f32>::ones((1, 2, 1, 3, 1)); // (1, 2, 1, 3, 1)
+        let vecb = Tensor::<f32>::ones((4, 1, 5, 1, 6)); // (4, 1, 5, 1, 6)
         
         let vecc = veca.add(vecb.view());
         
@@ -1774,8 +1774,8 @@ mod tests {
     #[test]
     fn test_broadcast_both_singletons_5d_all_different() {
         // (1, 3, 1, 1, 7) and (2, 1, 4, 5, 1) -> (2, 3, 4, 5, 7)
-        let veca = CpuTensor::<f32>::ones((1, 3, 1, 1, 7)); // (1, 3, 1, 1, 7)
-        let vecb = CpuTensor::<f32>::ones((2, 1, 4, 5, 1)); // (2, 1, 4, 5, 1)
+        let veca = Tensor::<f32>::ones((1, 3, 1, 1, 7)); // (1, 3, 1, 1, 7)
+        let vecb = Tensor::<f32>::ones((2, 1, 4, 5, 1)); // (2, 1, 4, 5, 1)
         
         let vecc = veca.add(vecb.view());
         
@@ -1790,8 +1790,8 @@ mod tests {
     fn test_broadcast_both_singletons_mixed_ranks() {
         // (1, 5) and (3, 1, 1) -> (3, 1, 5) - wait, this should be (3, 1, 5)? Let me recalculate
         // Actually: (1, 5) needs to be prepended -> (1, 1, 5), then broadcast with (3, 1, 1) -> (3, 1, 5)
-        let veca = CpuTensor::<f32>::ones((1, 5)); // (1, 5)
-        let vecb = CpuTensor::<f32>::ones((3, 1, 1)); // (3, 1, 1)
+        let veca = Tensor::<f32>::ones((1, 5)); // (1, 5)
+        let vecb = Tensor::<f32>::ones((3, 1, 1)); // (3, 1, 1)
         
         let vecc = veca.add(vecb.view());
         
@@ -1809,8 +1809,8 @@ mod tests {
     #[should_panic]
     fn test_broadcast_both_singletons_incompatible_2d() {
         // (3, 1) and (1, 5) would work, but (3, 4) and (5, 1) won't
-        let veca = CpuTensor::<f32>::ones((3, 4)); // (3, 4) - no singleton!
-        let vecb = CpuTensor::<f32>::ones((5, 1)); // (5, 1)
+        let veca = Tensor::<f32>::ones((3, 4)); // (3, 4) - no singleton!
+        let vecb = Tensor::<f32>::ones((5, 1)); // (5, 1)
         
         // Should fail: 3 != 5 and 4 != 1
         let _vecc = veca.add(vecb.view());
@@ -1820,8 +1820,8 @@ mod tests {
     #[should_panic]
     fn test_broadcast_both_singletons_incompatible_3d() {
         // (2, 1, 4) and (1, 3, 5) won't work because 4 != 5
-        let veca = CpuTensor::<f32>::ones((2, 1, 4)); // (2, 1, 4)
-        let vecb = CpuTensor::<f32>::ones((1, 3, 5)); // (1, 3, 5)
+        let veca = Tensor::<f32>::ones((2, 1, 4)); // (2, 1, 4)
+        let vecb = Tensor::<f32>::ones((1, 3, 5)); // (1, 3, 5)
         
         // Should fail: 4 != 5
         let _vecc = veca.add(vecb.view());
@@ -1831,8 +1831,8 @@ mod tests {
     #[should_panic]
     fn test_broadcast_both_singletons_incompatible_4d() {
         // (1, 3, 1, 6) and (2, 1, 4, 7) won't work because 6 != 7
-        let veca = CpuTensor::<f32>::ones((1, 3, 1, 6)); // (1, 3, 1, 6)
-        let vecb = CpuTensor::<f32>::ones((2, 1, 4, 7)); // (2, 1, 4, 7)
+        let veca = Tensor::<f32>::ones((1, 3, 1, 6)); // (1, 3, 1, 6)
+        let vecb = Tensor::<f32>::ones((2, 1, 4, 7)); // (2, 1, 4, 7)
         
         // Should fail: 6 != 7
         let _vecc = veca.add(vecb.view());
@@ -1843,8 +1843,8 @@ mod tests {
     fn test_broadcast_both_singletons_incompatible_middle() {
         // (1, 4, 1) and (3, 1, 5) would give (3, 4, 5)
         // but (2, 4, 1) and (3, 1, 5) fails because 2 != 3
-        let veca = CpuTensor::<f32>::ones((2, 4, 1)); // (2, 4, 1)
-        let vecb = CpuTensor::<f32>::ones((3, 1, 5)); // (3, 1, 5)
+        let veca = Tensor::<f32>::ones((2, 4, 1)); // (2, 4, 1)
+        let vecb = Tensor::<f32>::ones((3, 1, 5)); // (3, 1, 5)
         
         // Should fail: 2 != 3
         let _vecc = veca.add(vecb.view());
@@ -1852,18 +1852,18 @@ mod tests {
 
     #[test]
     fn test_add_assign_broadcast() {
-        let mut tensor = CpuTensor::<i32>::zeros((3, 3));
-        let tensor2 = CpuTensor::<i32>::ones((3,));
+        let mut tensor = Tensor::<i32>::zeros((3, 3));
+        let tensor2 = Tensor::<i32>::ones((3,));
         tensor += tensor2.view();
-        let expected = CpuTensor::<i32>::ones((3, 3));
+        let expected = Tensor::<i32>::ones((3, 3));
         assert_eq!(tensor, expected);
     }
 
     #[test]
     #[should_panic]
     fn test_add_assign_broadcast_incompatible() {
-        let mut tensor = CpuTensor::<i32>::zeros((1, 3));
-        let tensor2 = CpuTensor::<i32>::ones((4, 3));
+        let mut tensor = Tensor::<i32>::zeros((1, 3));
+        let tensor2 = Tensor::<i32>::ones((4, 3));
         tensor += tensor2.view(); // Should panic
     }
 
@@ -1873,9 +1873,9 @@ mod tests {
 
     #[test]
     fn test_sub_broadcast_basic() {
-        let mut veca = CpuTensor::<f32>::ones((3, 3));
+        let mut veca = Tensor::<f32>::ones((3, 3));
         veca.view_mut().set(vec![0, 0], 5.0).unwrap();
-        let vecb = CpuTensor::<f32>::ones((3, 1));
+        let vecb = Tensor::<f32>::ones((3, 1));
         
         let vecc = veca - vecb.view();
         
@@ -1890,8 +1890,8 @@ mod tests {
 
     #[test]
     fn test_sub_3d_broadcast() {
-        let veca = CpuTensor::<f32>::from_buf(vec![10.0, 20.0, 30.0], vec![3]).unwrap();
-        let vecb = CpuTensor::<f32>::ones((2, 4, 3));
+        let veca = Tensor::<f32>::from_buf(vec![10.0, 20.0, 30.0], vec![3]).unwrap();
+        let vecb = Tensor::<f32>::ones((2, 4, 3));
         
         let vecc = veca - vecb.view();
         
@@ -1907,18 +1907,18 @@ mod tests {
 
     #[test]
     fn test_sub_assign_broadcast() {
-        let mut tensor = CpuTensor::<i32>::from_buf(vec![5, 10, 15], vec![3]).unwrap();
-        let tensor2 = CpuTensor::<i32>::ones((3,));
+        let mut tensor = Tensor::<i32>::from_buf(vec![5, 10, 15], vec![3]).unwrap();
+        let tensor2 = Tensor::<i32>::ones((3,));
         tensor -= tensor2.view();
-        let expected = CpuTensor::<i32>::from_buf(vec![4, 9, 14], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![4, 9, 14], vec![3]).unwrap();
         assert_eq!(tensor, expected);
     }
 
     #[test]
     #[should_panic]
     fn test_sub_assign_broadcast_incompatible() {
-        let mut tensor = CpuTensor::<i32>::zeros((1, 3));
-        let tensor2 = CpuTensor::<i32>::ones((4, 3));
+        let mut tensor = Tensor::<i32>::zeros((1, 3));
+        let tensor2 = Tensor::<i32>::ones((4, 3));
         tensor -= tensor2.view();
     }
 
@@ -1928,9 +1928,9 @@ mod tests {
 
     #[test]
     fn test_mul_broadcast_basic() {
-        let mut veca = CpuTensor::<f32>::ones((3, 3));
+        let mut veca = Tensor::<f32>::ones((3, 3));
         veca.view_mut().set(vec![0, 0], 5.0).unwrap();
-        let mut vecb = CpuTensor::<f32>::ones((3, 1));
+        let mut vecb = Tensor::<f32>::ones((3, 1));
         vecb.view_mut().set(vec![1, 0], 2.0).unwrap();
         
         let vecc = veca * vecb.view();
@@ -1943,8 +1943,8 @@ mod tests {
 
     #[test]
     fn test_mul_3d_broadcast() {
-        let veca = CpuTensor::<f32>::from_buf(vec![2.0, 3.0, 4.0], vec![3]).unwrap();
-        let vecb = CpuTensor::<f32>::ones((2, 4, 3));
+        let veca = Tensor::<f32>::from_buf(vec![2.0, 3.0, 4.0], vec![3]).unwrap();
+        let vecb = Tensor::<f32>::ones((2, 4, 3));
         
         let vecc = veca * vecb.view();
         
@@ -1960,8 +1960,8 @@ mod tests {
 
     #[test]
     fn test_mul_scalar_broadcast() {
-        let veca = CpuTensor::<f32>::from_buf(vec![5.0], vec![]).unwrap();
-        let vecb = CpuTensor::<f32>::from_buf(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
+        let veca = Tensor::<f32>::from_buf(vec![5.0], vec![]).unwrap();
+        let vecb = Tensor::<f32>::from_buf(vec![1.0, 2.0, 3.0, 4.0], vec![2, 2]).unwrap();
         
         let vecc = veca * vecb.view();
         
@@ -1974,18 +1974,18 @@ mod tests {
 
     #[test]
     fn test_mul_assign_broadcast() {
-        let mut tensor = CpuTensor::<i32>::from_buf(vec![2, 4, 6], vec![3]).unwrap();
-        let tensor2 = CpuTensor::<i32>::from_buf(vec![3, 3, 3], vec![3]).unwrap();
+        let mut tensor = Tensor::<i32>::from_buf(vec![2, 4, 6], vec![3]).unwrap();
+        let tensor2 = Tensor::<i32>::from_buf(vec![3, 3, 3], vec![3]).unwrap();
         tensor *= tensor2.view();
-        let expected = CpuTensor::<i32>::from_buf(vec![6, 12, 18], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![6, 12, 18], vec![3]).unwrap();
         assert_eq!(tensor, expected);
     }
 
     #[test]
     #[should_panic]
     fn test_mul_assign_broadcast_incompatible() {
-        let mut tensor = CpuTensor::<i32>::zeros((1, 3));
-        let tensor2 = CpuTensor::<i32>::ones((4, 3));
+        let mut tensor = Tensor::<i32>::zeros((1, 3));
+        let tensor2 = Tensor::<i32>::ones((4, 3));
         tensor *= tensor2.view();
     }
 
@@ -1996,8 +1996,8 @@ mod tests {
     // --- TensorBase op TensorBase ---
     #[test]
     fn test_tensorbase_add_tensorbase() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a + b;
         assert_eq!(*c.shape(), vec![2, 3]);
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
@@ -2005,8 +2005,8 @@ mod tests {
 
     #[test]
     fn test_tensorbase_sub_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![5.0, 3.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::ones((2,));
+        let a = Tensor::<f32>::from_buf(vec![5.0, 3.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::ones((2,));
         let c = a - b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 4.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 2.0);
@@ -2014,8 +2014,8 @@ mod tests {
 
     #[test]
     fn test_tensorbase_mul_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![4.0, 5.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![4.0, 5.0], vec![2]).unwrap();
         let c = a * b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 8.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 15.0);
@@ -2024,16 +2024,16 @@ mod tests {
     // --- TensorBase op TensorView ---
     #[test]
     fn test_tensorbase_add_tensorview() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a + b.view();
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorbase_sub_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![3.0, 7.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![3.0, 7.0], vec![2]).unwrap();
         let c = a - b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 7.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 13.0);
@@ -2041,8 +2041,8 @@ mod tests {
 
     #[test]
     fn test_tensorbase_mul_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![6.0, 7.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![6.0, 7.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
         let c = a * b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 12.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 21.0);
@@ -2051,16 +2051,16 @@ mod tests {
     // --- TensorBase op TensorViewMut ---
     #[test]
     fn test_tensorbase_add_tensorviewmut() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let mut b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let mut b = Tensor::<f32>::ones((2, 3));
         let c = a + b.view_mut();
         assert_eq!(c.view().get(vec![1, 2]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorbase_sub_tensorviewmut() {
-        let a = CpuTensor::<f32>::from_buf(vec![8.0, 9.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![8.0, 9.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
         let c = a - b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 5.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 5.0);
@@ -2068,8 +2068,8 @@ mod tests {
 
     #[test]
     fn test_tensorbase_mul_tensorviewmut() {
-        let a = CpuTensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![2.0, 2.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![2.0, 2.0], vec![2]).unwrap();
         let c = a * b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 10.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 12.0);
@@ -2078,16 +2078,16 @@ mod tests {
     // --- TensorBase op &TensorBase ---
     #[test]
     fn test_tensorbase_add_ref_tensorbase() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a + &b;
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorbase_sub_ref_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![15.0, 25.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![5.0, 10.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![15.0, 25.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![5.0, 10.0], vec![2]).unwrap();
         let c = a - &b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 10.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 15.0);
@@ -2095,8 +2095,8 @@ mod tests {
 
     #[test]
     fn test_tensorbase_mul_ref_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
         let c = a * &b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 15.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 24.0);
@@ -2105,16 +2105,16 @@ mod tests {
     // --- &TensorBase op TensorBase ---
     #[test]
     fn test_ref_tensorbase_add_tensorbase() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = &a + b;
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_ref_tensorbase_sub_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![20.0, 30.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![8.0, 12.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![20.0, 30.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![8.0, 12.0], vec![2]).unwrap();
         let c = &a - b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 12.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 18.0);
@@ -2122,8 +2122,8 @@ mod tests {
 
     #[test]
     fn test_ref_tensorbase_mul_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![7.0, 8.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![7.0, 8.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
         let c = &a * b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 14.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 24.0);
@@ -2132,16 +2132,16 @@ mod tests {
     // --- &TensorBase op &TensorBase ---
     #[test]
     fn test_ref_tensorbase_add_ref_tensorbase() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = &a + &b;
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_ref_tensorbase_sub_ref_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![100.0, 200.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![30.0, 70.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![100.0, 200.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![30.0, 70.0], vec![2]).unwrap();
         let c = &a - &b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 70.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 130.0);
@@ -2149,8 +2149,8 @@ mod tests {
 
     #[test]
     fn test_ref_tensorbase_mul_ref_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![9.0, 10.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 4.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![9.0, 10.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 4.0], vec![2]).unwrap();
         let c = &a * &b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 18.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 40.0);
@@ -2159,16 +2159,16 @@ mod tests {
     // --- TensorView op TensorBase ---
     #[test]
     fn test_tensorview_add_tensorbase() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a.view() + b;
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorview_sub_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![50.0, 60.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![20.0, 25.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![50.0, 60.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![20.0, 25.0], vec![2]).unwrap();
         let c = a.view() - b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 30.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 35.0);
@@ -2176,8 +2176,8 @@ mod tests {
 
     #[test]
     fn test_tensorview_mul_tensorbase() {
-        let a = CpuTensor::<f32>::from_buf(vec![11.0, 12.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![11.0, 12.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
         let c = a.view() * b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 33.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 48.0);
@@ -2186,16 +2186,16 @@ mod tests {
     // --- TensorView op TensorView ---
     #[test]
     fn test_tensorview_add_tensorview() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a.view() + b.view();
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorview_sub_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![70.0, 80.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![30.0, 35.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![70.0, 80.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![30.0, 35.0], vec![2]).unwrap();
         let c = a.view() - b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 40.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 45.0);
@@ -2203,8 +2203,8 @@ mod tests {
 
     #[test]
     fn test_tensorview_mul_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![13.0, 14.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 5.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![13.0, 14.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 5.0], vec![2]).unwrap();
         let c = a.view() * b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 26.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 70.0);
@@ -2213,16 +2213,16 @@ mod tests {
     // --- TensorViewMut op TensorBase ---
     #[test]
     fn test_tensorviewmut_add_tensorbase() {
-        let mut a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let mut a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = a.view_mut() + b;
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorviewmut_sub_tensorbase() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![90.0, 100.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![40.0, 45.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![90.0, 100.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![40.0, 45.0], vec![2]).unwrap();
         let c = a.view_mut() - b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 50.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 55.0);
@@ -2230,8 +2230,8 @@ mod tests {
 
     #[test]
     fn test_tensorviewmut_mul_tensorbase() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![15.0, 16.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![15.0, 16.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
         let c = a.view_mut() * b;
         assert_eq!(c.view().get(vec![0]).unwrap(), 30.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 48.0);
@@ -2240,16 +2240,16 @@ mod tests {
     // --- TensorViewMut op TensorViewMut ---
     #[test]
     fn test_tensorviewmut_add_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::ones((2, 3));
-        let mut b = CpuTensor::<f32>::ones((2, 3));
+        let mut a = Tensor::<f32>::ones((2, 3));
+        let mut b = Tensor::<f32>::ones((2, 3));
         let c = a.view_mut() + b.view_mut();
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_tensorviewmut_sub_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![110.0, 120.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![50.0, 60.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![110.0, 120.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![50.0, 60.0], vec![2]).unwrap();
         let c = a.view_mut() - b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 60.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 60.0);
@@ -2257,8 +2257,8 @@ mod tests {
 
     #[test]
     fn test_tensorviewmut_mul_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![17.0, 18.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![17.0, 18.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
         let c = a.view_mut() * b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 51.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 72.0);
@@ -2267,16 +2267,16 @@ mod tests {
     // --- &TensorView op &TensorView ---
     #[test]
     fn test_ref_tensorview_add_ref_tensorview() {
-        let a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         let c = &a.view() + &b.view();
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_ref_tensorview_sub_ref_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![150.0, 200.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![50.0, 100.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![150.0, 200.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![50.0, 100.0], vec![2]).unwrap();
         let c = &a.view() - &b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 100.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 100.0);
@@ -2284,8 +2284,8 @@ mod tests {
 
     #[test]
     fn test_ref_tensorview_mul_ref_tensorview() {
-        let a = CpuTensor::<f32>::from_buf(vec![19.0, 20.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![2.0, 5.0], vec![2]).unwrap();
+        let a = Tensor::<f32>::from_buf(vec![19.0, 20.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![2.0, 5.0], vec![2]).unwrap();
         let c = &a.view() * &b.view();
         assert_eq!(c.view().get(vec![0]).unwrap(), 38.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 100.0);
@@ -2294,16 +2294,16 @@ mod tests {
     // --- &TensorViewMut op &TensorViewMut ---
     #[test]
     fn test_ref_tensorviewmut_add_ref_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::ones((2, 3));
-        let mut b = CpuTensor::<f32>::ones((2, 3));
+        let mut a = Tensor::<f32>::ones((2, 3));
+        let mut b = Tensor::<f32>::ones((2, 3));
         let c = &a.view_mut() + &b.view_mut();
         assert_eq!(c.view().get(vec![0, 0]).unwrap(), 2.0);
     }
 
     #[test]
     fn test_ref_tensorviewmut_sub_ref_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![250.0, 300.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![100.0, 150.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![250.0, 300.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![100.0, 150.0], vec![2]).unwrap();
         let c = &a.view_mut() - &b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 150.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 150.0);
@@ -2311,8 +2311,8 @@ mod tests {
 
     #[test]
     fn test_ref_tensorviewmut_mul_ref_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![21.0, 22.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![21.0, 22.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![3.0, 4.0], vec![2]).unwrap();
         let c = &a.view_mut() * &b.view_mut();
         assert_eq!(c.view().get(vec![0]).unwrap(), 63.0);
         assert_eq!(c.view().get(vec![1]).unwrap(), 88.0);
@@ -2321,8 +2321,8 @@ mod tests {
     // --- AddAssign/SubAssign/MulAssign for TensorViewMut ---
     #[test]
     fn test_tensorviewmut_add_assign_tensorbase() {
-        let mut a = CpuTensor::<f32>::ones((2, 3));
-        let b = CpuTensor::<f32>::ones((2, 3));
+        let mut a = Tensor::<f32>::ones((2, 3));
+        let b = Tensor::<f32>::ones((2, 3));
         {
             let mut view = a.view_mut();
             view += b;
@@ -2332,8 +2332,8 @@ mod tests {
 
     #[test]
     fn test_tensorviewmut_sub_assign_tensorview() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
-        let b = CpuTensor::<f32>::from_buf(vec![3.0, 7.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
+        let b = Tensor::<f32>::from_buf(vec![3.0, 7.0], vec![2]).unwrap();
         {
             let mut view = a.view_mut();
             view -= b.view();
@@ -2344,8 +2344,8 @@ mod tests {
 
     #[test]
     fn test_tensorviewmut_mul_assign_tensorviewmut() {
-        let mut a = CpuTensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
-        let mut b = CpuTensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
+        let mut a = Tensor::<f32>::from_buf(vec![5.0, 6.0], vec![2]).unwrap();
+        let mut b = Tensor::<f32>::from_buf(vec![2.0, 3.0], vec![2]).unwrap();
         {
             let mut view_a = a.view_mut();
             let view_b = b.view_mut();
@@ -2354,6 +2354,311 @@ mod tests {
         assert_eq!(a.view().get(vec![0]).unwrap(), 10.0);
         assert_eq!(a.view().get(vec![1]).unwrap(), 18.0);
     }
+
+    #[test]
+    fn test_broadcast_post_slice() {
+        let mut a = Tensor::<f32>::ones((4, 3));
+        let mut b = Tensor::<f32>::ones((2, 1));
+
+        let c = a.slice_mut(0, Slice::from(0..3).step(2)).unwrap();
+        assert_eq!(*c.shape(), vec![2, 3]);
+        
+        b.set(vec![0, 0], 2.0).unwrap();
+
+        let d = c + b;
+        let expected = vec![
+            3.0, 3.0, 3.0, 
+            2.0, 2.0, 2.0
+        ];
+        let expected = Tensor::from_buf(expected, vec![2, 3]).unwrap();
+        assert_eq!(expected, d);
+
+    }
+
+    #[test]
+    fn test_broadcast_with_negative_step_slice() {
+        // Test broadcasting with reversed slice (negative step)
+        let mut a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            vec![4, 3]
+        ).unwrap();
+        
+        // Slice with negative step: reverse the rows
+        let sliced = a.slice_mut(0, Slice::from(..).step(-1)).unwrap();
+        assert_eq!(*sliced.shape(), vec![4, 3]);
+        
+        // Broadcast a vector along the reversed dimension
+        let b = Tensor::<f32>::from_buf(vec![10.0, 20.0, 30.0], vec![3]).unwrap();
+        let result = sliced + b;
+        
+        // Expected: rows reversed, then each row gets [10, 20, 30] added
+        let expected = vec![
+            20.0, 31.0, 42.0,  // row 3 (10, 11, 12) + (10, 20, 30)
+            17.0, 28.0, 39.0,  // row 2 (7, 8, 9) + (10, 20, 30)
+            14.0, 25.0, 36.0,  // row 1 (4, 5, 6) + (10, 20, 30)
+            11.0, 22.0, 33.0,  // row 0 (1, 2, 3) + (10, 20, 30)
+        ];
+        let expected = Tensor::from_buf(expected, vec![4, 3]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_with_column_slice_negative_step() {
+        // Test broadcasting with reversed column slice
+        let a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            vec![2, 3]
+        ).unwrap();
+        
+        // Slice columns in reverse
+        let sliced = a.slice(1, Slice::from(..).step(-1)).unwrap();
+        assert_eq!(*sliced.shape(), vec![2, 3]);
+        
+        // Broadcast a column vector
+        let b = Tensor::<f32>::from_buf(vec![100.0, 200.0], vec![2, 1]).unwrap();
+        let result = sliced + b;
+        
+        // Expected: columns reversed [3,2,1,6,5,4], then broadcast
+        let expected = vec![
+            103.0, 102.0, 101.0,  // [3, 2, 1] + 100
+            206.0, 205.0, 204.0,  // [6, 5, 4] + 200
+        ];
+        let expected = Tensor::from_buf(expected, vec![2, 3]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_with_step_2_slice() {
+        // Test broadcasting with step=2 slice
+        let a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            vec![8]
+        ).unwrap();
+        
+        // Every other element
+        let sliced = a.slice(0, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*sliced.shape(), vec![4]);
+        
+        // Broadcast a scalar
+        let b = Tensor::<f32>::from_buf(vec![10.0], vec![]).unwrap();
+        let result = sliced + b;
+        
+        // Expected: [1, 3, 5, 7] + 10
+        let expected = vec![11.0, 13.0, 15.0, 17.0];
+        let expected = Tensor::from_buf(expected, vec![4]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_with_negative_step_2_slice() {
+        // Test broadcasting with negative step=-2 slice
+        let a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            vec![8]
+        ).unwrap();
+        
+        // Every other element in reverse
+        let sliced = a.slice(0, Slice::from(..).step(-2)).unwrap();
+        assert_eq!(*sliced.shape(), vec![4]);
+        
+        // Broadcast a scalar
+        let result = sliced + 100.0;
+        
+        // Expected: [8, 6, 4, 2] + 100
+        let expected = vec![108.0, 106.0, 104.0, 102.0];
+        let expected = Tensor::from_buf(expected, vec![4]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_with_3d_negative_step() {
+        // Test 3D tensor with negative step slice and broadcasting
+        let a = Tensor::<f32>::from_buf(
+            vec![
+                1.0, 2.0, 3.0, 4.0,
+                5.0, 6.0, 7.0, 8.0,
+                9.0, 10.0, 11.0, 12.0,
+            ],
+            vec![3, 2, 2]
+        ).unwrap();
+        
+        // Reverse the first dimension
+        let sliced = a.slice(0, Slice::from(..).step(-1)).unwrap();
+        assert_eq!(*sliced.shape(), vec![3, 2, 2]);
+        
+        // Broadcast a matrix
+        let b = Tensor::<f32>::from_buf(vec![10.0, 20.0, 30.0, 40.0], vec![2, 2]).unwrap();
+        let result = sliced + b;
+        
+        // Expected: depth reversed, then add [[10, 20], [30, 40]] to each slice
+        let expected = vec![
+            19.0, 30.0, 41.0, 52.0,  // [9, 10, 11, 12] + [10, 20, 30, 40]
+            15.0, 26.0, 37.0, 48.0,  // [5, 6, 7, 8] + [10, 20, 30, 40]
+            11.0, 22.0, 33.0, 44.0,  // [1, 2, 3, 4] + [10, 20, 30, 40]
+        ];
+        let expected = Tensor::from_buf(expected, vec![3, 2, 2]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_inplace_with_negative_step() {
+        // Test inplace broadcasting with negative step slice
+        let mut a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            vec![2, 3]
+        ).unwrap();
+        
+        // Reverse columns - view is [[3,2,1], [6,5,4]]
+        let mut sliced = a.slice_mut(1, Slice::from(..).step(-1)).unwrap();
+        assert_eq!(*sliced.shape(), vec![2, 3]);
+        
+        // Broadcast and modify in place - adds 10 to each element through the reversed view
+        let b = Tensor::<f32>::from_buf(vec![10.0], vec![1, 1]).unwrap();
+        sliced += b;
+        
+        // Original tensor modified: each position gets modified through the reversed view
+        // Original [[1,2,3], [4,5,6]] with reversed columns means:
+        // position [0,0]=1 gets +10 (accessed as view[0,2]), position [0,1]=2 gets +10 (view[0,1]), etc.
+        let expected = vec![11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+        let expected = Tensor::from_buf(expected, vec![2, 3]).unwrap();
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_broadcast_chained_slices_with_negative_steps() {
+        // Test broadcasting after chaining multiple slices with different steps
+        let a = Tensor::<f32>::from_buf(
+            vec![
+                1.0, 2.0, 3.0, 4.0,
+                5.0, 6.0, 7.0, 8.0,
+                9.0, 10.0, 11.0, 12.0,
+                13.0, 14.0, 15.0, 16.0,
+            ],
+            vec![4, 4]
+        ).unwrap();
+        
+        // First slice: reverse rows
+        let sliced1 = a.slice(0, Slice::from(..).step(-1)).unwrap();
+        // Second slice: take every other column
+        let sliced2 = sliced1.slice(1, Slice::from(..).step(2)).unwrap();
+        assert_eq!(*sliced2.shape(), vec![4, 2]);
+        
+        // Broadcast a row vector
+        let b = Tensor::<f32>::from_buf(vec![100.0, 200.0], vec![1, 2]).unwrap();
+        let result = sliced2 + b;
+        
+        // Expected: rows reversed, then cols [0, 2], then add [100, 200]
+        let expected = vec![
+            113.0, 215.0,  // row 3: [13, 15] + [100, 200]
+            109.0, 211.0,  // row 2: [9, 11] + [100, 200]
+            105.0, 207.0,  // row 1: [5, 7] + [100, 200]
+            101.0, 203.0,  // row 0: [1, 3] + [100, 200]
+        ];
+        let expected = Tensor::from_buf(expected, vec![4, 2]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_scalar_with_complex_negative_slice() {
+        // Test scalar broadcasting to complexly sliced tensor
+        let a = Tensor::<i32>::from_buf(
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            vec![10]
+        ).unwrap();
+        
+        // Slice from index 8 down to 2 with step -2
+        let sliced = a.slice(0, Slice::new(Some(8), Some(2), -2)).unwrap();
+        assert_eq!(*sliced.shape(), vec![3]);
+        
+        // Broadcast scalar
+        let result = sliced + 100;
+        
+        // Expected: [9, 7, 5] + 100 (indices 8, 6, 4)
+        let expected = vec![109, 107, 105];
+        let expected = Tensor::from_buf(expected, vec![3]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_vector_to_negative_step_matrix_slice() {
+        // Test vector broadcast to matrix with negative step slice
+        let a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+            vec![4, 3]
+        ).unwrap();
+        
+        // Take rows 3, 1 (reverse with step -2 starting from index 3)
+        let sliced = a.slice(0, Slice::new(Some(3), None, -2)).unwrap();
+        assert_eq!(*sliced.shape(), vec![2, 3]);
+        
+        // Broadcast vector along columns
+        let b = Tensor::<f32>::from_buf(vec![5.0, 10.0], vec![2, 1]).unwrap();
+        let result = sliced + b;
+        
+        // Expected: rows [3, 1] = [[10,11,12], [4,5,6]] + [[5], [10]]
+        let expected = vec![
+            15.0, 16.0, 17.0,  // [10, 11, 12] + 5
+            14.0, 15.0, 16.0,  // [4, 5, 6] + 10
+        ];
+        let expected = Tensor::from_buf(expected, vec![2, 3]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_both_tensors_sliced_negative_steps() {
+        // Test broadcasting when both tensors have negative step slices
+        let a = Tensor::<f32>::from_buf(
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            vec![2, 3]
+        ).unwrap();
+        
+        let b = Tensor::<f32>::from_buf(
+            vec![10.0, 20.0, 30.0],
+            vec![1, 3]
+        ).unwrap();
+        
+        // Reverse columns of a, reverse columns of b
+        let sliced_a = a.slice(1, Slice::from(..).step(-1)).unwrap();
+        let sliced_b = b.slice(1, Slice::from(..).step(-1)).unwrap();
+        
+        let result = sliced_a + sliced_b;
+        
+        // a columns reversed: [[3, 2, 1], [6, 5, 4]]
+        // b columns reversed: [30, 20, 10]
+        let expected = vec![
+            33.0, 22.0, 11.0,  // [3, 2, 1] + [30, 20, 10]
+            36.0, 25.0, 14.0,  // [6, 5, 4] + [30, 20, 10]
+        ];
+        let expected = Tensor::from_buf(expected, vec![2, 3]).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_broadcast_4d_with_negative_step_multiple_dims() {
+        // Test 4D broadcasting with negative steps on multiple dimensions
+        let a = Tensor::<f32>::from_buf(
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+                9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+            ],
+            vec![2, 2, 2, 2]
+        ).unwrap();
+        
+        // Reverse dimension 0 and dimension 2
+        let sliced1 = a.slice(0, Slice::from(..).step(-1)).unwrap();
+        let sliced2 = sliced1.slice(2, Slice::from(..).step(-1)).unwrap();
+        assert_eq!(*sliced2.shape(), vec![2, 2, 2, 2]);
+        
+        // Broadcast a vector along last dimension
+        let b = Tensor::<f32>::from_buf(vec![100.0, 200.0], vec![2]).unwrap();
+        let result = sliced2 + b;
+        
+        // Complex reversal pattern + broadcasting
+        assert_eq!(*result.shape(), vec![2, 2, 2, 2]);
+        // After reversing dims 0 and 2: position [0,0,0,:] has values [11, 12]
+        assert_eq!(result.get(vec![0, 0, 0, 0]).unwrap(), 111.0); // 11 + 100
+        assert_eq!(result.get(vec![0, 0, 0, 1]).unwrap(), 212.0); // 12 + 200
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -2361,7 +2666,7 @@ mod tests {
 mod cuda_tests {
     use std::ops::Add;
 
-    use crate::{core::{primitives::CudaTensor, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut}, CpuTensor, MetaTensorView}};
+    use crate::{core::{primitives::CudaTensor, tensor::{AsView, AsViewMut, TensorAccess, TensorAccessMut}, Tensor, MetaTensorView}};
 
 
     #[test]
@@ -2369,7 +2674,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view += 5;
-        let expected = CpuTensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2378,7 +2683,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view *= 4;
-        let expected = CpuTensor::<i32>::from_buf(vec![4, 8, 12], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![4, 8, 12], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2387,7 +2692,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view -= 7;
-        let expected = CpuTensor::<i32>::from_buf(vec![3, 13, 23], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![3, 13, 23], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2397,7 +2702,7 @@ mod cuda_tests {
         let value = 10;
         let mut view = tensor.view_mut();
         view += value;
-        let expected = CpuTensor::<i32>::from_buf(vec![11, 12, 13], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![11, 12, 13], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
     
@@ -2407,7 +2712,7 @@ mod cuda_tests {
         let value = 10;
         let mut view = tensor.view_mut();
         view -= value;
-        let expected = CpuTensor::<i32>::from_buf(vec![0, 10, 20], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![0, 10, 20], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2417,7 +2722,7 @@ mod cuda_tests {
         let value = 10;
         let mut view = tensor.view_mut();
         view *= &value;
-        let expected = CpuTensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2426,7 +2731,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view += -5;
-        let expected = CpuTensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2435,7 +2740,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view -= -5;
-        let expected = CpuTensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2444,7 +2749,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         let mut view = tensor.view_mut();
         view *= -5;
-        let expected = CpuTensor::<i32>::from_buf(vec![-5, -10, -15], vec![3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![-5, -10, -15], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2474,7 +2779,7 @@ mod cuda_tests {
         
         slice += 100;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 104, 105, 106], vec![2, 3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![1, 2, 3, 104, 105, 106], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2515,7 +2820,7 @@ mod cuda_tests {
         
         slice *= 10;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![10, 20, 30, 40, 5, 6, 7, 8], vec![2, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![10, 20, 30, 40, 5, 6, 7, 8], vec![2, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2543,7 +2848,7 @@ mod cuda_tests {
         
         col_slice *= 3;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![1, 6, 3, 4, 15, 6], vec![2, 3]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![1, 6, 3, 4, 15, 6], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2579,7 +2884,7 @@ mod cuda_tests {
         
         row_slice += value;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4, 1005, 1006, 7, 8], vec![2, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![1, 2, 3, 4, 1005, 1006, 7, 8], vec![2, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -2592,11 +2897,11 @@ mod cuda_tests {
         let result = view + 5;
         
         // Result should be a new tensor with added values
-        let expected_result = CpuTensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
         // Original tensor should be unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2607,10 +2912,10 @@ mod cuda_tests {
         let view = tensor.view_mut();
         let result = view + value;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![11, 12, 13], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![11, 12, 13], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2620,10 +2925,10 @@ mod cuda_tests {
         let view = tensor.view_mut();
         let result = view - 5;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
-        let expected_original = CpuTensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2633,10 +2938,10 @@ mod cuda_tests {
         let view = tensor.view_mut();
         let result = view * 5;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![5, 10, 15], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![5, 10, 15], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2648,12 +2953,12 @@ mod cuda_tests {
         let result = slice + 100;
         
         // Result should be a new 1D tensor
-        let expected_result = CpuTensor::<i32>::from_buf(vec![104, 105, 106], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![104, 105, 106], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         assert_eq!(*result.shape(), vec![3]);
         
         // Original tensor should be unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2669,13 +2974,13 @@ mod cuda_tests {
         let result = col_slice * 3;
         
         // Result should be a new contiguous tensor
-        let expected_result = CpuTensor::<i32>::from_buf(vec![6, 15], vec![2]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![6, 15], vec![2]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         assert_eq!(*result.shape(), vec![2]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2686,11 +2991,11 @@ mod cuda_tests {
         let tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3, 4], vec![4]).unwrap();
         let result = tensor.view() + 10;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![11, 12, 13, 14], vec![4]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![11, 12, 13, 14], vec![4]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
         // Original unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4], vec![4]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3, 4], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2699,11 +3004,11 @@ mod cuda_tests {
         let tensor = CudaTensor::<i32>::from_buf(vec![10, 20, 30, 40, 50, 60], vec![2, 3]).unwrap();
         let result = tensor.view().slice(0, 0..0).unwrap() - 5;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
         // Original unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![10, 20, 30, 40, 50, 60], vec![2, 3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![10, 20, 30, 40, 50, 60], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2712,11 +3017,11 @@ mod cuda_tests {
         let tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
         let result = tensor.view() * 10;
         
-        let expected_result = CpuTensor::<i32>::from_buf(vec![10, 20, 30, 40, 50, 60], vec![2, 3]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![10, 20, 30, 40, 50, 60], vec![2, 3]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         
         // Original unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -2898,7 +3203,7 @@ mod cuda_tests {
         view *= 2.0;
         view -= 3.5;
         
-        let expected = CpuTensor::<f64>::from_buf(
+        let expected = Tensor::<f64>::from_buf(
             vec![20.0, 22.0, 24.0, 26.0], 
             vec![4]
         ).unwrap();
@@ -2921,7 +3226,7 @@ mod cuda_tests {
         view -= 50;
         view *= 3;
         
-        let expected = CpuTensor::<i64>::from_buf(
+        let expected = Tensor::<i64>::from_buf(
             vec![150, 450, 750, 1050, 1350], 
             vec![5]
         ).unwrap();
@@ -2938,7 +3243,7 @@ mod cuda_tests {
         view += 5;
         view *= 2;
         
-        let expected = CpuTensor::<u32>::from_buf(
+        let expected = Tensor::<u32>::from_buf(
             vec![30, 50, 70, 90], 
             vec![4]
         ).unwrap();
@@ -2955,7 +3260,7 @@ mod cuda_tests {
         view *= 10;
         view += 5;
         
-        let expected = CpuTensor::<i16>::from_buf(
+        let expected = Tensor::<i16>::from_buf(
             vec![15, 25, 35, 45, 55, 65], 
             vec![2, 3]
         ).unwrap();
@@ -2977,7 +3282,7 @@ mod cuda_tests {
         view *= 0.5;
         
         // Expected: ((x * 2 + 10) - 5) * 0.5 = (x * 2 + 5) * 0.5 = x + 2.5
-        let expected = CpuTensor::<f32>::from_buf(
+        let expected = Tensor::<f32>::from_buf(
             vec![3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5], 
             vec![2, 2, 2]
         ).unwrap();
@@ -2999,7 +3304,7 @@ mod cuda_tests {
         view *= 1;
         view -= 0;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3012,7 +3317,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view *= 0;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![0, 0, 0, 0], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![0, 0, 0, 0], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3024,7 +3329,7 @@ mod cuda_tests {
         view *= 2.0;
         view += 8.0;
         
-        let expected = CpuTensor::<f32>::from_buf(vec![92.0], vec![1]).unwrap();
+        let expected = Tensor::<f32>::from_buf(vec![92.0], vec![1]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3037,7 +3342,7 @@ mod cuda_tests {
         view += 100;
         
         let expected_data: Vec<i32> = (101..=116).collect();
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3053,7 +3358,7 @@ mod cuda_tests {
         middle_row *= 10.0;
         middle_row += 5.0;
         
-        let expected = CpuTensor::<f32>::from_buf(
+        let expected = Tensor::<f32>::from_buf(
             vec![1.0, 2.0, 3.0, 45.0, 55.0, 65.0, 7.0, 8.0, 9.0], 
             vec![3, 3]
         ).unwrap();
@@ -3072,7 +3377,7 @@ mod cuda_tests {
         view *= 3;   // [60, 120, 180, 240]
         view += 10;  // [70, 130, 190, 250]
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![70, 130, 190, 250], 
             vec![4]
         ).unwrap();
@@ -3108,16 +3413,16 @@ mod cuda_tests {
         let view3 = tensor.view_mut();
         let result3 = view3 - 1;
         
-        let expected1 = CpuTensor::<i32>::from_buf(vec![11, 12, 13, 14], vec![4]).unwrap();
-        let expected2 = CpuTensor::<i32>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
-        let expected3 = CpuTensor::<i32>::from_buf(vec![0, 1, 2, 3], vec![4]).unwrap();
+        let expected1 = Tensor::<i32>::from_buf(vec![11, 12, 13, 14], vec![4]).unwrap();
+        let expected2 = Tensor::<i32>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
+        let expected3 = Tensor::<i32>::from_buf(vec![0, 1, 2, 3], vec![4]).unwrap();
         
         assert_eq!(result1.cpu().unwrap(), expected1);
         assert_eq!(result2.cpu().unwrap(), expected2);
         assert_eq!(result3.cpu().unwrap(), expected3);
         
         // Original unchanged
-        let expected_original = CpuTensor::<i32>::from_buf(vec![1, 2, 3, 4], vec![4]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![1, 2, 3, 4], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -3146,7 +3451,7 @@ mod cuda_tests {
         view *= -1;
         view += 5;
         
-        let expected = CpuTensor::<i32>::from_buf(vec![15, 25, 35, 45], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![15, 25, 35, 45], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3160,7 +3465,7 @@ mod cuda_tests {
         view += 1_000_000;
         view -= 500_000;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![1_500_000, 2_500_000, 3_500_000], 
             vec![3]
         ).unwrap();
@@ -3177,7 +3482,7 @@ mod cuda_tests {
         view *= 0.5;
         view *= 0.25;
         
-        let expected = CpuTensor::<f32>::from_buf(
+        let expected = Tensor::<f32>::from_buf(
             vec![1.25, 2.5, 3.75, 5.0], 
             vec![4]
         ).unwrap();
@@ -3202,7 +3507,7 @@ mod cuda_tests {
         col += 100;
         col *= 2;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![1, 204, 3, 4, 210, 6, 7, 216, 9], 
             vec![3, 3]
         ).unwrap();
@@ -3227,7 +3532,7 @@ mod cuda_tests {
             expected_data[i] *= 10.0;
         }
         
-        let expected = CpuTensor::<f32>::from_buf(expected_data, vec![3, 3, 3]).unwrap();
+        let expected = Tensor::<f32>::from_buf(expected_data, vec![3, 3, 3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3288,7 +3593,7 @@ mod cuda_tests {
         assert!(tensor.is_scalar());
         let mut view = tensor.view_mut();
         view += 10;
-        let expected = CpuTensor::<i32>::from_buf(vec![52], vec![]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![52], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3297,7 +3602,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![7], vec![]).unwrap();
         let mut view = tensor.view_mut();
         view *= 6;
-        let expected = CpuTensor::<i32>::from_buf(vec![42], vec![]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![42], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3306,7 +3611,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![100], vec![]).unwrap();
         let mut view = tensor.view_mut();
         view -= 58;
-        let expected = CpuTensor::<i32>::from_buf(vec![42], vec![]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![42], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3316,7 +3621,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view *= -3;
         view += 5;
-        let expected = CpuTensor::<i32>::from_buf(vec![35], vec![]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![35], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3327,7 +3632,7 @@ mod cuda_tests {
         view += 42;
         view *= 0;
         view += 10;
-        let expected = CpuTensor::<i32>::from_buf(vec![10], vec![]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![10], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3335,10 +3640,10 @@ mod cuda_tests {
     fn test_scalar_non_inplace_cuda() {
         let tensor = CudaTensor::<i32>::from_buf(vec![100], vec![]).unwrap();
         let result = tensor.view() + 50;
-        let expected_result = CpuTensor::<i32>::from_buf(vec![150], vec![]).unwrap();
+        let expected_result = Tensor::<i32>::from_buf(vec![150], vec![]).unwrap();
         assert_eq!(result.cpu().unwrap(), expected_result);
         assert!(result.is_scalar());
-        let expected_original = CpuTensor::<i32>::from_buf(vec![100], vec![]).unwrap();
+        let expected_original = Tensor::<i32>::from_buf(vec![100], vec![]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_original);
     }
 
@@ -3350,7 +3655,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view += 10;
         view *= 2;
-        let expected = CpuTensor::<i32>::from_buf(vec![30], vec![1]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![30], vec![1]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3359,7 +3664,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![8], vec![1, 1]).unwrap();
         let mut view = tensor.view_mut();
         view *= 5;
-        let expected = CpuTensor::<i32>::from_buf(vec![40], vec![1, 1]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![40], vec![1, 1]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3369,7 +3674,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view += 7;
         view *= 3;
-        let expected = CpuTensor::<i32>::from_buf(vec![30], vec![1, 1, 1]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![30], vec![1, 1, 1]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3380,7 +3685,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], vec![9, 1]).unwrap();
         let mut view = tensor.view_mut();
         view *= 2;
-        let expected = CpuTensor::<i32>::from_buf(vec![2, 4, 6, 8, 10, 12, 14, 16, 18], vec![9, 1]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![2, 4, 6, 8, 10, 12, 14, 16, 18], vec![9, 1]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3389,7 +3694,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], vec![1, 9]).unwrap();
         let mut view = tensor.view_mut();
         view += 10;
-        let expected = CpuTensor::<i32>::from_buf(vec![11, 12, 13, 14, 15, 16, 17, 18, 19], vec![1, 9]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![11, 12, 13, 14, 15, 16, 17, 18, 19], vec![1, 9]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3401,7 +3706,7 @@ mod cuda_tests {
         ).unwrap();
         let mut view = tensor.view_mut();
         view *= 3;
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![3, 6, 9, 12, 15, 18, 21, 24, 27, 30], 
             vec![2, 5]
         ).unwrap();
@@ -3416,7 +3721,7 @@ mod cuda_tests {
         ).unwrap();
         let mut view = tensor.view_mut();
         view -= 1;
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 
             vec![5, 2]
         ).unwrap();
@@ -3431,7 +3736,7 @@ mod cuda_tests {
         view += 100;
         
         let expected_data: Vec<i32> = (101..=124).collect();
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 3, 4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 3, 4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3445,7 +3750,7 @@ mod cuda_tests {
         let mut slice = view.slice_mut(0, 1..1).unwrap(); // Second row: [5, 6, 7, 8]
         slice *= 10;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![1, 2, 3, 4, 50, 60, 70, 80, 9, 10, 11, 12], 
             vec![3, 4]
         ).unwrap();
@@ -3460,7 +3765,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view += 10;
         view *= 2;
-        let expected = CpuTensor::<i32>::from_buf(vec![20, 20, 20, 20], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![20, 20, 20, 20], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3469,7 +3774,7 @@ mod cuda_tests {
         let mut tensor = CudaTensor::<i32>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
         let mut view = tensor.view_mut();
         view *= 0;
-        let expected = CpuTensor::<i32>::from_buf(vec![0, 0, 0, 0], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![0, 0, 0, 0], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3483,7 +3788,7 @@ mod cuda_tests {
         view *= 2;
         view += 10;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![0, 30, -20, 50, -40, 70], 
             vec![6]
         ).unwrap();
@@ -3499,7 +3804,7 @@ mod cuda_tests {
         let mut view = tensor.view_mut();
         view += 500_000;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![1_500_000, 2_500_000, 3_500_000], 
             vec![3]
         ).unwrap();
@@ -3521,7 +3826,7 @@ mod cuda_tests {
         col += 100;
         col *= 2;
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![1, 204, 3, 4, 210, 6, 7, 216, 9, 10, 222, 12], 
             vec![4, 3]
         ).unwrap();
@@ -3565,7 +3870,7 @@ mod cuda_tests {
             expected_data[i - 1] += 100;
         }
         
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 3, 4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 3, 4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3579,7 +3884,7 @@ mod cuda_tests {
         view += 10;
         
         let expected_data: Vec<i32> = (11..=26).collect();
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3597,7 +3902,7 @@ mod cuda_tests {
             expected_data[i] *= 10;
         }
         
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 3, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 3, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3610,7 +3915,7 @@ mod cuda_tests {
         view += 5;
         
         let expected_data: Vec<i32> = (1..=32).map(|x| x * 2 + 5).collect();
-        let expected = CpuTensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2, 2]).unwrap();
+        let expected = Tensor::<i32>::from_buf(expected_data, vec![2, 2, 2, 2, 2]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3632,7 +3937,7 @@ mod cuda_tests {
         view -= 10;  // [20, 32, 44, 56]
         view *= 1;   // [20, 32, 44, 56]
         
-        let expected = CpuTensor::<i32>::from_buf(vec![20, 32, 44, 56], vec![4]).unwrap();
+        let expected = Tensor::<i32>::from_buf(vec![20, 32, 44, 56], vec![4]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected);
     }
 
@@ -3646,7 +3951,7 @@ mod cuda_tests {
         
         // Non-inplace
         let result1 = tensor.view() * 2;
-        let expected_result1 = CpuTensor::<i32>::from_buf(vec![20, 30, 40], vec![3]).unwrap();
+        let expected_result1 = Tensor::<i32>::from_buf(vec![20, 30, 40], vec![3]).unwrap();
         assert_eq!(result1.cpu().unwrap(), expected_result1);
         
         // Inplace again
@@ -3655,11 +3960,11 @@ mod cuda_tests {
         
         // Non-inplace again
         let result2 = tensor.view() + 10;
-        let expected_result2 = CpuTensor::<i32>::from_buf(vec![40, 55, 70], vec![3]).unwrap();
+        let expected_result2 = Tensor::<i32>::from_buf(vec![40, 55, 70], vec![3]).unwrap();
         assert_eq!(result2.cpu().unwrap(), expected_result2);
         
         // Original tensor should reflect inplace ops
-        let expected_final = CpuTensor::<i32>::from_buf(vec![30, 45, 60], vec![3]).unwrap();
+        let expected_final = Tensor::<i32>::from_buf(vec![30, 45, 60], vec![3]).unwrap();
         assert_eq!(tensor.cpu().unwrap(), expected_final);
     }
 
@@ -3684,7 +3989,7 @@ mod cuda_tests {
             row2 *= 5;
         }
         
-        let expected = CpuTensor::<i32>::from_buf(
+        let expected = Tensor::<i32>::from_buf(
             vec![11, 12, 13, 20, 25, 30], 
             vec![2, 3]
         ).unwrap();
@@ -4483,7 +4788,7 @@ mod cuda_tests {
         let vecc = veca - scalar;
         
         assert_eq!(*vecc.shape(), vec![3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![5.0, 15.0, 25.0], vec![3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![5.0, 15.0, 25.0], vec![3]).unwrap());
     }
 
     #[test]
@@ -4495,7 +4800,7 @@ mod cuda_tests {
         let vecc = veca - vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![9.0, 18.0, 27.0, 39.0, 48.0, 57.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![9.0, 18.0, 27.0, 39.0, 48.0, 57.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4507,7 +4812,7 @@ mod cuda_tests {
         let vecc = veca - vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![5.0, 15.0, 25.0, 30.0, 40.0, 50.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![5.0, 15.0, 25.0, 30.0, 40.0, 50.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4553,7 +4858,7 @@ mod cuda_tests {
         let vecc = veca.view() - vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 2]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![90.0, 190.0, 280.0, 380.0], vec![2, 2]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![90.0, 190.0, 280.0, 380.0], vec![2, 2]).unwrap());
     }
 
     #[test]
@@ -4565,7 +4870,7 @@ mod cuda_tests {
         let vecc = veca.view_mut() - vecb.view_mut();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![45.0, 50.0, 55.0, 75.0, 80.0, 85.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![45.0, 50.0, 55.0, 75.0, 80.0, 85.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4577,7 +4882,7 @@ mod cuda_tests {
         let vecc = veca - vecb;
         
         assert_eq!(*vecc.shape(), vec![2, 2]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![17.0, 23.0, 37.0, 43.0], vec![2, 2]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![17.0, 23.0, 37.0, 43.0], vec![2, 2]).unwrap());
     }
 
     // ==================== MULTIPLICATION BROADCASTING TESTS ====================
@@ -4591,7 +4896,7 @@ mod cuda_tests {
         let vecc = veca * scalar;
         
         assert_eq!(*vecc.shape(), vec![3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![10.0, 15.0, 20.0], vec![3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![10.0, 15.0, 20.0], vec![3]).unwrap());
     }
 
     #[test]
@@ -4603,7 +4908,7 @@ mod cuda_tests {
         let vecc = veca * vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![10.0, 40.0, 90.0, 40.0, 100.0, 180.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![10.0, 40.0, 90.0, 40.0, 100.0, 180.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4615,7 +4920,7 @@ mod cuda_tests {
         let vecc = veca * vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![10.0, 20.0, 30.0, 400.0, 500.0, 600.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![10.0, 20.0, 30.0, 400.0, 500.0, 600.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4666,7 +4971,7 @@ mod cuda_tests {
         let vecc = veca.view() * vecb.view();
         
         assert_eq!(*vecc.shape(), vec![2, 2]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![20.0, 40.0, 90.0, 120.0], vec![2, 2]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![20.0, 40.0, 90.0, 120.0], vec![2, 2]).unwrap());
     }
 
     #[test]
@@ -4678,7 +4983,7 @@ mod cuda_tests {
         let vecc = veca.view_mut() * vecb.view_mut();
         
         assert_eq!(*vecc.shape(), vec![2, 3]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![10.0, 18.0, 28.0, 16.0, 27.0, 40.0], vec![2, 3]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![10.0, 18.0, 28.0, 16.0, 27.0, 40.0], vec![2, 3]).unwrap());
     }
 
     #[test]
@@ -4690,7 +4995,7 @@ mod cuda_tests {
         let vecc = veca * vecb;
         
         assert_eq!(*vecc.shape(), vec![2, 2]);
-        assert_eq!(vecc.cpu().unwrap(), CpuTensor::<f32>::from_buf(vec![20.0, 300.0, 40.0, 500.0], vec![2, 2]).unwrap());
+        assert_eq!(vecc.cpu().unwrap(), Tensor::<f32>::from_buf(vec![20.0, 300.0, 40.0, 500.0], vec![2, 2]).unwrap());
     }
 
     #[test]

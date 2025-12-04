@@ -5,6 +5,7 @@ pub mod add;
 pub mod sub;
 pub mod mul;
 
+#[inline]
 pub(crate) fn compute_broadcasted_params(
     a: &MetaTensor,
     b: &MetaTensor,
