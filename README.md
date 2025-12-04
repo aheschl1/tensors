@@ -21,6 +21,7 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [ ] strides and offset as bytes  
 - [X] Broadcasting
 - [ ] Idx should not be ref. makes it less ergonomic
+- [ ] Pull out ops into crate defined traits, which return Result, and call that from Add and AddAssign impls (panic there)
 
 ## to optimize
 
@@ -32,7 +33,7 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [X] perf sucks for non-contiguous memory in unary CPU - fix
 - [X] perf sucks for non-contiguous memory in unary CUDA - fix
 - [ ] O(rank * size) instead of O(size) broadcasting ops is bad
-- [ ] Broadcast cuda kernel puts a cap on tensor dim size - fix  
+- [ ] Broadcast cuda kernel puts a cap on tensor dim size - fix
 
 ## missing tests
 
