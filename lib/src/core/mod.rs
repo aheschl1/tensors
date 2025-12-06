@@ -1961,4 +1961,442 @@ mod tests {
         assert_eq!(index_tensor(Idx::At(0), &view).unwrap(), 1); // Unchanged
         assert_eq!(index_tensor(Idx::At(2), &view).unwrap(), 3); // Unchanged (skipped by step)
     }
+
+    // --- Permute and Transpose Tests ---
+    
+    #[test]
+    fn test_transpose_2d() {
+        // Test basic 2D matrix transpose
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6
+        ];
+        let shape = vec![2, 3]; // 2 rows, 3 columns
+        let tensor = make_tensor(buf, shape);
+        
+        let view = tensor.view();
+        let transposed = view.transpose().unwrap();
+        assert_eq!(*transposed.shape(), vec![3, 2]); // 3 rows, 2 columns
+        assert_eq!(*transposed.stride(), vec![1, 3]); // stride is swapped
+        
+        // Check values are correctly transposed
+        assert_eq!(index_tensor(coord![0, 0], &transposed).unwrap(), 1);
+        assert_eq!(index_tensor(coord![0, 1], &transposed).unwrap(), 4);
+        assert_eq!(index_tensor(coord![1, 0], &transposed).unwrap(), 2);
+        assert_eq!(index_tensor(coord![1, 1], &transposed).unwrap(), 5);
+        assert_eq!(index_tensor(coord![2, 0], &transposed).unwrap(), 3);
+        assert_eq!(index_tensor(coord![2, 1], &transposed).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_transpose_3d() {
+        // Test 3D tensor transpose (reverses all dimensions)
+        let buf = vec![
+            1, 2,
+            3, 4,
+            
+            5, 6,
+            7, 8
+        ];
+        let shape = vec![2, 2, 2]; // depth, rows, columns
+        let tensor = make_tensor(buf, shape);
+        
+        let transposed = tensor.transpose().unwrap();
+        assert_eq!(*transposed.shape(), vec![2, 2, 2]); // dimensions reversed
+        assert_eq!(*transposed.stride(), vec![1, 2, 4]); // strides reversed
+        
+        // Original [0,0,0] -> 1, Transposed [0,0,0] -> 1
+        assert_eq!(index_tensor(coord![0, 0, 0], &transposed).unwrap(), 1);
+        // Original [0,0,1] -> 2, Transposed [1,0,0] -> 2
+        assert_eq!(index_tensor(coord![1, 0, 0], &transposed).unwrap(), 2);
+        // Original [0,1,0] -> 3, Transposed [0,1,0] -> 3
+        assert_eq!(index_tensor(coord![0, 1, 0], &transposed).unwrap(), 3);
+        // Original [1,0,0] -> 5, Transposed [0,0,1] -> 5
+        assert_eq!(index_tensor(coord![0, 0, 1], &transposed).unwrap(), 5);
+        // Original [1,1,1] -> 8, Transposed [1,1,1] -> 8
+        assert_eq!(index_tensor(coord![1, 1, 1], &transposed).unwrap(), 8);
+    }
+
+    #[test]
+    fn test_transpose_mut_2d() {
+        // Test mutable transpose with write
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6
+        ];
+        let shape = vec![2, 3];
+        let mut tensor = make_tensor(buf, shape);
+        
+        let mut transposed = tensor.transpose_mut().unwrap();
+        assert_eq!(*transposed.shape(), vec![3, 2]);
+        
+        // Modify through transposed view
+        transposed.set(coord![0, 0], 10).unwrap(); // Original [0,0]
+        transposed.set(coord![1, 1], 50).unwrap(); // Original [1,1]
+        transposed.set(coord![2, 1], 60).unwrap(); // Original [1,2]
+        
+        // Check original tensor was modified
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![0, 0], &view).unwrap(), 10);
+        assert_eq!(index_tensor(coord![1, 1], &view).unwrap(), 50);
+        assert_eq!(index_tensor(coord![1, 2], &view).unwrap(), 60);
+    }
+
+    #[test]
+    fn test_transpose_mut_3d() {
+        // Test mutable 3D transpose with write
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![2, 2, 2];
+        let mut tensor = make_tensor(buf, shape);
+        
+        let mut transposed = tensor.transpose_mut().unwrap();
+        assert_eq!(*transposed.shape(), vec![2, 2, 2]);
+        
+        // Modify through transposed view
+        transposed.set(coord![0, 0, 0], 100).unwrap(); // Original [0,0,0]
+        transposed.set(coord![1, 0, 0], 200).unwrap(); // Original [0,0,1]
+        transposed.set(coord![0, 0, 1], 500).unwrap(); // Original [1,0,0]
+        
+        // Check original tensor
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![0, 0, 0], &view).unwrap(), 100);
+        assert_eq!(index_tensor(coord![0, 0, 1], &view).unwrap(), 200);
+        assert_eq!(index_tensor(coord![1, 0, 0], &view).unwrap(), 500);
+    }
+
+    #[test]
+    fn test_permute_2d_swap() {
+        // Test permuting 2D tensor (same as transpose for 2D)
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6
+        ];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        
+        let permuted = tensor.permute(vec![1, 0]).unwrap();
+        assert_eq!(*permuted.shape(), vec![3, 2]);
+        assert_eq!(*permuted.stride(), vec![1, 3]);
+        
+        // Should match transpose
+        assert_eq!(index_tensor(coord![0, 0], &permuted).unwrap(), 1);
+        assert_eq!(index_tensor(coord![1, 0], &permuted).unwrap(), 2);
+        assert_eq!(index_tensor(coord![2, 1], &permuted).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_permute_3d_rotate() {
+        // Test 3D permute with rotation [0,1,2] -> [2,0,1]
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6,
+            
+            7, 8, 9,
+            10, 11, 12
+        ];
+        let shape = vec![2, 2, 3]; // depth, rows, columns
+        let tensor = make_tensor(buf, shape);
+        
+        // Permute: [depth, rows, cols] -> [cols, depth, rows]
+        let permuted = tensor.permute(vec![2, 0, 1]).unwrap();
+        assert_eq!(*permuted.shape(), vec![3, 2, 2]); // [cols, depth, rows]
+        
+        // Original strides: [6, 3, 1]
+        // Permuted strides: [1, 6, 3]
+        assert_eq!(*permuted.stride(), vec![1, 6, 3]);
+        
+        // Original [0,0,0] -> 1, Permuted [0,0,0] -> 1
+        assert_eq!(index_tensor(coord![0, 0, 0], &permuted).unwrap(), 1);
+        // Original [0,0,1] -> 2, Permuted [1,0,0] -> 2
+        assert_eq!(index_tensor(coord![1, 0, 0], &permuted).unwrap(), 2);
+        // Original [0,1,0] -> 4, Permuted [0,0,1] -> 4
+        assert_eq!(index_tensor(coord![0, 0, 1], &permuted).unwrap(), 4);
+        // Original [1,1,2] -> 12, Permuted [2,1,1] -> 12
+        assert_eq!(index_tensor(coord![2, 1, 1], &permuted).unwrap(), 12);
+    }
+
+    #[test]
+    fn test_permute_3d_partial_swap() {
+        // Test swapping only first two dimensions
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![2, 2, 2];
+        let tensor = make_tensor(buf, shape);
+        
+        // Permute: [0,1,2] -> [1,0,2] (swap first two dims)
+        let permuted = tensor.permute(vec![1, 0, 2]).unwrap();
+        assert_eq!(*permuted.shape(), vec![2, 2, 2]);
+        assert_eq!(*permuted.stride(), vec![2, 4, 1]);
+        
+        // Original [0,0,0] -> 1, Permuted [0,0,0] -> 1
+        assert_eq!(index_tensor(coord![0, 0, 0], &permuted).unwrap(), 1);
+        // Original [0,1,0] -> 3, Permuted [1,0,0] -> 3
+        assert_eq!(index_tensor(coord![1, 0, 0], &permuted).unwrap(), 3);
+        // Original [1,0,1] -> 6, Permuted [0,1,1] -> 6
+        assert_eq!(index_tensor(coord![0, 1, 1], &permuted).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_permute_mut_with_write() {
+        // Test mutable permute with write operations
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6,
+            
+            7, 8, 9,
+            10, 11, 12
+        ];
+        let shape = vec![2, 2, 3];
+        let mut tensor = make_tensor(buf, shape);
+        
+        let mut permuted = tensor.permute_mut(vec![2, 0, 1]).unwrap();
+        assert_eq!(*permuted.shape(), vec![3, 2, 2]);
+        
+        // Write through permuted view
+        permuted.set(coord![0, 0, 0], 100).unwrap(); // Original [0,0,0]
+        permuted.set(coord![1, 0, 0], 200).unwrap(); // Original [0,0,1]
+        permuted.set(coord![2, 1, 1], 1200).unwrap(); // Original [1,1,2]
+        
+        // Verify original tensor was modified
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![0, 0, 0], &view).unwrap(), 100);
+        assert_eq!(index_tensor(coord![0, 0, 1], &view).unwrap(), 200);
+        assert_eq!(index_tensor(coord![1, 1, 2], &view).unwrap(), 1200);
+    }
+
+    #[test]
+    fn test_permute_identity() {
+        // Test that permuting with identity permutation keeps everything the same
+        let buf = vec![1, 2, 3, 4, 5, 6];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        
+        let permuted = tensor.permute(vec![0, 1]).unwrap();
+        assert_eq!(*permuted.shape(), vec![2, 3]);
+        assert_eq!(*permuted.stride(), vec![3, 1]);
+        
+        // All values should be the same
+        assert_eq!(index_tensor(coord![0, 0], &permuted).unwrap(), 1);
+        assert_eq!(index_tensor(coord![1, 2], &permuted).unwrap(), 6);
+    }
+
+    #[test]
+    fn test_permute_4d() {
+        // Test 4D permutation
+        let buf: Vec<i32> = (1..=16).collect();
+        let shape = vec![2, 2, 2, 2];
+        let tensor = make_tensor(buf, shape);
+        
+        // Permute: [0,1,2,3] -> [3,2,1,0] (reverse all)
+        let permuted = tensor.permute(vec![3, 2, 1, 0]).unwrap();
+        assert_eq!(*permuted.shape(), vec![2, 2, 2, 2]);
+        assert_eq!(*permuted.stride(), vec![1, 2, 4, 8]);
+        
+        // Original [0,0,0,0] -> 1, Permuted [0,0,0,0] -> 1
+        assert_eq!(index_tensor(coord![0, 0, 0, 0], &permuted).unwrap(), 1);
+        // Original [0,0,0,1] -> 2, Permuted [1,0,0,0] -> 2
+        assert_eq!(index_tensor(coord![1, 0, 0, 0], &permuted).unwrap(), 2);
+        // Original [1,1,1,1] -> 16, Permuted [1,1,1,1] -> 16
+        assert_eq!(index_tensor(coord![1, 1, 1, 1], &permuted).unwrap(), 16);
+    }
+
+    #[test]
+    fn test_permute_on_slice() {
+        // Test permuting a slice
+        let buf = vec![
+            1, 2, 3, 4,
+            5, 6, 7, 8,
+            9, 10, 11, 12
+        ];
+        let shape = vec![3, 4];
+        let tensor = make_tensor(buf, shape);
+        
+        // First take a slice of rows
+        let slice = tensor.slice(0, 1..3).unwrap(); // Rows 1-2
+        assert_eq!(*slice.shape(), vec![2, 4]);
+        
+        // Then permute the slice
+        let permuted = slice.permute(vec![1, 0]).unwrap();
+        assert_eq!(*permuted.shape(), vec![4, 2]);
+        
+        // Check values
+        assert_eq!(index_tensor(coord![0, 0], &permuted).unwrap(), 5); // Original [1,0]
+        assert_eq!(index_tensor(coord![3, 1], &permuted).unwrap(), 12); // Original [2,3]
+    }
+
+    #[test]
+    fn test_transpose_on_slice() {
+        // Test transposing a slice
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6,
+            7, 8, 9,
+            10, 11, 12
+        ];
+        let shape = vec![4, 3];
+        let tensor = make_tensor(buf, shape);
+        
+        // Slice middle two rows
+        let slice = tensor.slice(0, 1..3).unwrap();
+        assert_eq!(*slice.shape(), vec![2, 3]);
+        
+        // Transpose the slice
+        let transposed = slice.transpose().unwrap();
+        assert_eq!(*transposed.shape(), vec![3, 2]);
+        
+        assert_eq!(index_tensor(coord![0, 0], &transposed).unwrap(), 4);
+        assert_eq!(index_tensor(coord![2, 1], &transposed).unwrap(), 9);
+    }
+
+    #[test]
+    fn test_chained_permutations() {
+        // Test chaining multiple permutations
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![2, 2, 2];
+        let tensor = make_tensor(buf, shape);
+        
+        // First permute: [0,1,2] -> [2,0,1]
+        let perm1 = tensor.permute(vec![2, 0, 1]).unwrap();
+        assert_eq!(*perm1.shape(), vec![2, 2, 2]);
+        
+        // Second permute: [0,1,2] -> [1,2,0] on perm1
+        // Composition: [2,0,1][1,2,0] = [0,1,2] (identity)
+        let perm2 = perm1.permute(vec![1, 2, 0]).unwrap();
+        assert_eq!(*perm2.shape(), vec![2, 2, 2]);
+        
+        // Verify composition - should be back to original layout
+        assert_eq!(index_tensor(coord![0, 0, 0], &perm2).unwrap(), 1);
+        assert_eq!(index_tensor(coord![1, 0, 0], &perm2).unwrap(), 5);
+        assert_eq!(index_tensor(coord![0, 1, 0], &perm2).unwrap(), 3);
+        assert_eq!(index_tensor(coord![1, 1, 1], &perm2).unwrap(), 8);
+    }
+
+    #[test]
+    fn test_permute_mut_chained() {
+        // Test chained mutable permutations with writes
+        let buf = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let shape = vec![2, 2, 2];
+        let mut tensor = make_tensor(buf, shape);
+        
+        {
+            let mut perm1 = tensor.permute_mut(vec![1, 0, 2]).unwrap();
+            let mut perm2 = perm1.permute_mut(vec![2, 0, 1]).unwrap();
+            
+            // Write through doubly-permuted view
+            perm2.set(coord![0, 0, 0], 111).unwrap();
+        }
+        
+        // Check original tensor
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![0, 0, 0], &view).unwrap(), 111);
+    }
+
+    #[test]
+    fn test_permute_wrong_dims_error() {
+        // Test error when permutation has wrong number of dimensions
+        let tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![2, 3]);
+        
+        // Too few dimensions
+        assert!(matches!(
+            tensor.view().permute(vec![0]),
+            Err(TensorError::WrongDims)
+        ));
+        
+        // Too many dimensions
+        assert!(matches!(
+            tensor.view().permute(vec![0, 1, 2]),
+            Err(TensorError::WrongDims)
+        ));
+    }
+
+    #[test]
+    fn test_permute_invalid_dim_error() {
+        // Test error when permutation contains invalid dimension index
+        let tensor = make_tensor(vec![1, 2, 3, 4, 5, 6], vec![2, 3]);
+        
+        // Dimension index out of range
+        assert!(matches!(
+            tensor.view().permute(vec![0, 3]),
+            Err(TensorError::InvalidDim)
+        ));
+        
+        assert!(matches!(
+            tensor.view().permute(vec![2, 1]),
+            Err(TensorError::InvalidDim)
+        ));
+    }
+
+    #[test]
+    fn test_transpose_then_slice() {
+        // Test slicing after transpose
+        let buf = vec![
+            1, 2, 3,
+            4, 5, 6
+        ];
+        let shape = vec![2, 3];
+        let tensor = make_tensor(buf, shape);
+        
+        let transposed = tensor.transpose().unwrap();
+        assert_eq!(*transposed.shape(), vec![3, 2]);
+        
+        // Slice first row of transposed (which is first column of original)
+        let slice = transposed.slice(0, 0..0).unwrap();
+        assert_eq!(*slice.shape(), vec![2]);
+        assert_eq!(index_tensor(Idx::At(0), &slice).unwrap(), 1);
+        assert_eq!(index_tensor(Idx::At(1), &slice).unwrap(), 4);
+    }
+
+    #[test]
+    fn test_slice_then_transpose_mut() {
+        // Test transpose_mut after slicing with writes
+        let buf = vec![
+            1, 2, 3, 4,
+            5, 6, 7, 8,
+            9, 10, 11, 12
+        ];
+        let shape = vec![3, 4];
+        let mut tensor = make_tensor(buf, shape);
+        
+        {
+            let mut slice_mut = tensor.slice_mut(0, 0..2).unwrap();
+            let mut transposed = slice_mut.transpose_mut().unwrap();
+            
+            // Modify through transposed slice
+            transposed.set(coord![0, 0], 100).unwrap(); // Original [0,0]
+            transposed.set(coord![3, 1], 800).unwrap(); // Original [1,3]
+        }
+        
+        // Check original
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![0, 0], &view).unwrap(), 100);
+        assert_eq!(index_tensor(coord![1, 3], &view).unwrap(), 800);
+        assert_eq!(index_tensor(coord![2, 0], &view).unwrap(), 9); // Unchanged
+    }
+
+    #[test]
+    fn test_permute_write_compatibility_complex() {
+        // Complex test: slice -> permute -> write -> verify original
+        let buf: Vec<i32> = (1..=24).collect();
+        let shape = vec![2, 3, 4];
+        let mut tensor = make_tensor(buf, shape);
+        
+        {
+            // Take a slice
+            let mut slice_mut = tensor.slice_mut(0, 1..2).unwrap();
+            assert_eq!(*slice_mut.shape(), vec![1, 3, 4]);
+            
+            // Permute the slice
+            let mut permuted = slice_mut.permute_mut(vec![2, 0, 1]).unwrap();
+            assert_eq!(*permuted.shape(), vec![4, 1, 3]);
+            
+            // Write through permuted view
+            permuted.set(coord![0, 0, 0], 1300).unwrap(); // Original [1,0,0]
+            permuted.set(coord![3, 0, 2], 2400).unwrap(); // Original [1,2,3]
+        }
+        
+        // Verify writes propagated to original
+        let view = tensor.view();
+        assert_eq!(index_tensor(coord![1, 0, 0], &view).unwrap(), 1300);
+        assert_eq!(index_tensor(coord![1, 2, 3], &view).unwrap(), 2400);
+        assert_eq!(index_tensor(coord![0, 0, 0], &view).unwrap(), 1); // Unchanged (different slice)
+    }
 }
