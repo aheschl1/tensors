@@ -344,7 +344,7 @@ fn logical_to_buffer_idx(idx: &Idx, stride: &Strides, offset: usize) -> Result<u
             }else{
                 let bidx = idx
                     .iter()
-                    .zip(stride)
+                    .zip(stride.iter())
                     .fold(offset as isize, |acc, (a, b)| acc + (*a as isize) * *b);
                 if bidx < 0 {
                     return Err(TensorError::IdxOutOfBounds);
@@ -389,5 +389,5 @@ fn compute_permuted_parameters(shape: &Shape, stride: &Strides, dims: &Idx) -> R
         new_stride.push(stride[d]);
     }
 
-    Ok((new_shape.into(), new_stride))
+    Ok((new_shape.into(), new_stride.into()))
 }

@@ -59,7 +59,6 @@ macro_rules! impl_add_assign {
                 
                 let meta_a = MetaTensor::new(out_shape.clone(), broadcast_stra, self.offset());
                 let meta_b = MetaTensor::new(out_shape.clone(), broadcast_strb, rhs.offset());
-
                 unsafe {
                     self.backend.broadcast(
                         (&self.buf as *const B::Buf, &meta_a),

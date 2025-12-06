@@ -93,7 +93,7 @@ pub trait Backend<T: TensorValue> {
             op,
             meta.offset,
             meta.shape.as_slice(),
-            &meta.strides,
+            meta.strides.as_ref(),
         )
     }
 }

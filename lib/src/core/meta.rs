@@ -5,7 +5,67 @@ use crate::{backend::Backend, core::{primitives::TensorBase, value::TensorValue,
 use super::primitives::TensorView;
 
 pub type Dim = usize;
-pub type Strides = Vec<isize>;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Strides(pub Vec<isize>);
+
+impl Strides {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, isize> {
+        self.0.iter()
+    }
+
+    pub fn as_slice(&self) -> &[isize] {
+        &self.0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn remove(&mut self, index: usize) -> isize {
+        self.0.remove(index)
+    }
+
+    pub fn squash_leading_dims(&self, n: usize) -> Strides {
+        if n == 0 || self.is_empty() {
+            return self.clone();
+        }
+        let mut new_strides = vec![];
+        let mut prod = 1;
+        for i in 0..n.min(self.len()) {
+            prod *= self[i];
+        }
+        new_strides.push(prod);
+        for i in n..self.len() {
+            new_strides.push(self[i]);
+        }
+        Strides(new_strides)
+    }
+}
+
+impl Index<usize> for Strides {
+    type Output = isize;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for Strides {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+impl PartialEq<Vec<isize>> for Strides {
+    fn eq(&self, other: &Vec<isize>) -> bool {
+        &self.0 == other
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Shape(pub Vec<Dim>);
@@ -86,8 +146,8 @@ pub struct MetaTensor {
 
 impl MetaTensor {
     /// Creates tensor metadata with explicit shape, stride and offset.
-    pub fn new(shape: impl Into<Shape>, stride: Strides, offset: usize) -> Self {
-        Self { shape: shape.into(), strides: stride, offset }
+    pub fn new(shape: impl Into<Shape>, strides: impl Into<Strides>, offset: usize) -> Self {
+        Self { shape: shape.into(), strides: strides.into(), offset }
     }
 
     /// Returns true when the metadata describes a scalar (rank 0).
@@ -268,7 +328,7 @@ pub fn shape_to_stride(shape: &Shape) -> Strides {
             stride[i] = stride[i + 1] * shape[i + 1] as isize;
         }
     }
-    stride 
+    Strides(stride)
 }
 
 
@@ -412,5 +472,23 @@ impl From<(Dim, Dim, Dim, Dim)> for Shape {
 impl From<(Dim, Dim, Dim, Dim, Dim)> for Shape {
     fn from(t: (Dim, Dim, Dim, Dim, Dim)) -> Self {
         Shape(vec![t.0, t.1, t.2, t.3, t.4])
+    }
+}
+
+impl From<Strides> for Vec<isize> {
+    fn from(val: Strides) -> Self {
+        val.0
+    }
+}
+
+impl From<Vec<isize>> for Strides {
+    fn from(v: Vec<isize>) -> Self {
+        Strides(v)
+    }
+}
+
+impl AsRef<[isize]> for Strides {
+    fn as_ref(&self) -> &[isize] {
+        &self.0
     }
 }
