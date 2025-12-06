@@ -38,6 +38,22 @@ impl Shape {
     pub fn contains(&self, dim: &Dim) -> bool {
         self.0.contains(dim)
     }
+
+    pub fn squash_leading_dims(&self, n: usize) -> Shape {
+        if n == 0 || self.is_empty() {
+            return self.clone();
+        }
+        let mut new_dims = vec![];
+        let mut prod = 1;
+        for i in 0..n.min(self.len()) {
+            prod *= self[i];
+        }
+        new_dims.push(prod);
+        for i in n..self.len() {
+            new_dims.push(self[i]);
+        }
+        Shape(new_dims)
+    }
 }
 
 impl Index<usize> for Shape {

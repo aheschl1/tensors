@@ -170,4 +170,74 @@ impl<T: TensorValue> Backend<T> for Cpu {
 
         Ok(())
     }
+    
+    fn matmul(
+        &self,
+        lhs: (MetaTensor, &Self::Buf), 
+        rhs: (MetaTensor, &Self::Buf)
+    ) -> Result<Self::Buf, TensorError> {
+        // ugly placeholder
+        let (lhs_meta, lhs_buf) = lhs;
+        let (rhs_meta, rhs_buf) = rhs;
+
+        if lhs_meta.rank() != rhs_meta.rank() {
+            return Err(TensorError::InvalidShape);
+        }
+        if lhs_meta.rank() < 2{
+            return Err(TensorError::InvalidShape);
+        }
+        if lhs_meta.rank() > 3{
+            return Err(TensorError::InvalidShape);
+        }
+
+
+        let batched = lhs_meta.rank() == 3;
+
+        if batched {
+            let b = lhs_meta.shape[0]; // batch
+            let n = lhs_meta.shape[1]; // rows
+            let m = lhs_meta.shape[2]; // cols
+
+            if rhs_meta.shape[0] != b {
+                return Err(TensorError::SizeMismatch);
+            }
+            let p = rhs_meta.shape[1]; // cols
+            let q = rhs_meta.shape[2]; // rows
+            
+            if m != p {
+                return Err(TensorError::SizeMismatch);
+            }
+
+            //
+            //R^{n x m} * R^{m x q} = R^{n x q}
+            //
+
+            let mut dst_buf: Box<[T]> = self.alloc(b * n * q)?;
+            for batch in 0..b {
+                for row in 0..n {
+                    for col in 0..q {
+                        let mut acc = T::zero();
+                        for k in 0..m {
+                            let lhs_idx = batch * n * m + row * m + k;
+                            let rhs_idx = batch * p * q + k * q + col;
+                            unsafe {
+                                let lval = lhs_buf.get_unchecked(lhs_idx);
+                                let rval = rhs_buf.get_unchecked(rhs_idx);
+                                acc = acc + (*lval) * (*rval);
+                            }
+                        }
+                        let dst_idx = batch * n * q + row * q + col;
+                        unsafe {
+                            let slot = dst_buf.get_unchecked_mut(dst_idx);
+                            *slot = acc;
+                        }
+                    }
+                }
+            }
+
+            Ok(dst_buf)
+        }else{
+            Err(TensorError::InvalidShape)
+        }
+    }
 }

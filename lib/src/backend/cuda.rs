@@ -421,6 +421,14 @@ impl<T: TensorValue> Backend<T> for Cuda {
             _ => Err(TensorError::CudaError("Unsupported type for CUDA broadcast operation".to_string())),
         }
     }
+    
+    fn matmul(
+        &self,
+        lhs: (MetaTensor, &Self::Buf), 
+        rhs: (MetaTensor, &Self::Buf)
+    ) -> Result<Self::Buf, TensorError> {
+        todo!()
+    }
 
     
 }

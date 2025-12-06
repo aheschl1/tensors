@@ -46,6 +46,12 @@ pub trait Backend<T: TensorValue> {
         stride: &[isize],
     ) -> Result<(), TensorError>;
 
+    fn matmul(
+        &self,
+        lhs: (MetaTensor, &Self::Buf), 
+        rhs: (MetaTensor, &Self::Buf)
+    ) -> Result<Self::Buf, TensorError>;
+
     /// Broadcast two tensors into a destination tensor according to broadcasting rules
     /// 
     /// # Safety
@@ -89,6 +95,5 @@ pub trait Backend<T: TensorValue> {
             meta.shape.as_slice(),
             &meta.strides,
         )
-
     }
 }

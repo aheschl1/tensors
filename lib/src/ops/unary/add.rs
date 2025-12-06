@@ -9,7 +9,7 @@ impl<'a, T, B> AddAssign<T> for TensorViewMut<'a, T, B>
 {
     fn add_assign(&mut self, rhs: T) {
         self.backend.apply_elementwise(
-            self.raw, 
+            self.buf, 
             (OpType::Add, rhs),
             &self.meta
         ).unwrap();
@@ -22,7 +22,7 @@ impl<'a, T, B> AddAssign<&T> for TensorViewMut<'a, T, B>
 {
     fn add_assign(&mut self, rhs: &T) {
         self.backend.apply_elementwise(
-            self.raw, 
+            self.buf, 
             (OpType::Add, *rhs),
             &self.meta
         ).unwrap();
@@ -35,7 +35,7 @@ impl<T, B> AddAssign<T> for TensorBase<T, B>
 {
     fn add_assign(&mut self, rhs: T) {
         self.backend.apply_elementwise(
-            &mut self.raw, 
+            &mut self.buf, 
             (OpType::Add, rhs),
             &self.meta
         ).unwrap();
@@ -48,7 +48,7 @@ impl<T, B> AddAssign<&T> for TensorBase<T, B>
 {
     fn add_assign(&mut self, rhs: &T) {
         self.backend.apply_elementwise(
-            &mut self.raw, 
+            &mut self.buf, 
             (OpType::Add, *rhs),
             &self.meta
         ).unwrap();
