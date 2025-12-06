@@ -46,6 +46,7 @@ pub trait AsViewMut<T: TensorValue, B: Backend<T>> : AsView<T, B> {
 pub trait AsTensor<T: TensorValue, B: Backend<T>> {
     /// Converts to an owned tensor, copying data.
     fn owned(&self) -> TensorBase<T, B>;
+    fn contiguous(&self) -> TensorBase<T, B>;
 }
 
 impl<T: TensorValue, B: Backend<T>> AsView<T, B> for TensorBase<T, B> {
@@ -106,22 +107,39 @@ impl <T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorBase<T, B> {
     fn owned(&self) -> TensorBase<T, B> {
         self.clone()
     }
+    
+    fn contiguous(&self) -> TensorBase<T, B> {
+        if self.meta.is_contiguous() {
+            // fast path: already contiguous
+            self.clone()
+        } else {
+            view_to_contiguous(&self.meta, &self.raw, &self.backend).unwrap()
+        }
+    }
 }
 
 impl<'a, T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorView<'a, T, B> {
     fn owned(&self) -> TensorBase<T, B> {
-        view_to_owned(&self.meta, self.raw, self.backend).unwrap()
+        view_to_contiguous(&self.meta, self.raw, self.backend).unwrap()
+    }
+
+    fn contiguous(&self) -> TensorBase<T, B> {
+        self.owned()
     }
 }
 
 impl<'a, T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorViewMut<'a, T, B> {
     fn owned(&self) -> TensorBase<T, B> {
-        view_to_owned(&self.meta, self.raw, self.backend).unwrap()
+        view_to_contiguous(&self.meta, self.raw, self.backend).unwrap()
+    }
+
+    fn contiguous(&self) -> TensorBase<T, B> {
+        self.owned()
     }
 }
 
 #[inline]
-fn view_to_owned<T: TensorValue, B: Backend<T>>(meta: &MetaTensor, raw: &B::Buf, backend: &B) -> Result<TensorBase<T, B>, TensorError> {
+fn view_to_contiguous<T: TensorValue, B: Backend<T>>(meta: &MetaTensor, raw: &B::Buf, backend: &B) -> Result<TensorBase<T, B>, TensorError> {
     let size = meta.size();
     let new_backend = B::new();
     let mut new_buf = new_backend.alloc(size)?;
@@ -157,6 +175,7 @@ pub trait TensorAccess<T: TensorValue, B: Backend<T>>: Sized {
     }
 
     fn permute(&self, dims: impl Into<Idx>) -> Result<TensorView<'_, T, B>, TensorError>;
+    fn transpose(&self) -> Result<TensorView<'_, T, B>, TensorError>;
 }
 
 pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
@@ -170,6 +189,7 @@ pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
     }
 
     fn permute_mut(&mut self, dims: impl Into<Idx>) -> Result<TensorViewMut<'_, T, B>, TensorError> ;
+    fn transpose_mut(&mut self) -> Result<TensorViewMut<'_, T, B>, TensorError>;
 }
 
 impl<T: TensorValue, B: Backend<T>, V> TensorAccess<T, B> for V
@@ -220,6 +240,13 @@ where B: Backend<T>, V: AsView<T, B>
 
         Ok(view)
     }
+    
+    /// permute all dims
+    fn transpose(&self) -> Result<TensorView<'_, T, B>, TensorError> {
+        let rank = self.view().meta.rank();
+        let dims: Idx = Idx::Coord((0..rank).rev().collect());
+        self.permute(dims)
+    }
 }
 
 impl<T: TensorValue, B: Backend<T>, V> TensorAccessMut<T, B> for V
@@ -258,6 +285,12 @@ where V: AsViewMut<T, B>
         view.meta.strides = new_stride;
 
         Ok(view)
+    }
+
+    fn transpose_mut(&mut self) -> Result<TensorViewMut<'_, T, B>, TensorError> {
+        let rank = self.view().meta.rank();
+        let dims: Idx = Idx::Coord((0..rank).rev().collect());
+        self.permute_mut(dims)
     }
 
 }

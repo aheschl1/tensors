@@ -37,6 +37,8 @@ Goal is high performance ML stack with minimal dependencies and maximal flexibil
 - [ ] O(rank * size) instead of O(size) broadcasting ops is bad
 - [ ] Broadcast cuda kernel puts a cap on tensor dim size - fix
 - [ ] Idx can be borrow [Dim] to avoid clone
+- [ ] 0 copy immutable broadcast views?
+- [ ] Allow F contiguous for matmul, as well as C.
 
 ## Some examples
 
@@ -47,11 +49,11 @@ Note that they may not reflect most up to date API and syntax (assume reality ca
 ```rust
 let zeros = TensorBase::<f32, Cpu>::zeros((3, 4)); // 3x4 tensor of zeros
 
-let cpu_ones = CpuTensor::<f32>::ones((2, 2)); // 2x2 tensor of ones
+let cpu_ones = Tensor::<f32>::ones((2, 2)); // 2x2 tensor of ones
 let gpu_max = CudaTensor::<f32>::max((5, 5)); // 5x5 tensor of maximum f32 values on GPU
 let gpu_min = CudaTensor::<i32>::min((10, 1)); // 10x1 tensor of minimum i32 values on GPU
 
-let cpu_tensor = CpuTensor::<f64>::from_buf(vec![1.0, 2.0, 3.0, 4.0], (2, 2));
+let cpu_tensor = Tensor::<f64>::from_buf(vec![1.0, 2.0, 3.0, 4.0], (2, 2));
 let gpu_tensor = cpu_tensor.cuda();
 let cpu2 = gpu_tensor.cpu();
 
@@ -78,13 +80,13 @@ set!(tensor, v: 42.0, 1, 1);
 ### Arithmetic Operations
 
 ```rust
-let mut a = CpuTensor::<f32>::ones((2, 2));
+let mut a = Tensor::<f32>::ones((2, 2));
 
 a*= 3.0; 
 a+= 2.0;
 a-= 1.0;
 
-let b: CpuTensor::<f32> = a * 2.0; 
+let b: Tensor::<f32> = a * 2.0; 
 ```
 
 ### Slicing Syntax
@@ -144,66 +146,80 @@ If inplace, then the tensor being modified must be the same shape the result sha
 
 ```rust
 // Scalar to any shape - broadcasts everywhere
-let scalar = CpuTensor::<f32>::from_buf(vec![5.0], vec![]).unwrap();
-let matrix = CpuTensor::<f32>::ones((3, 4));
+let scalar = Tensor::<f32>::from_buf(vec![5.0], vec![]).unwrap();
+let matrix = Tensor::<f32>::ones((3, 4));
 let result = scalar + matrix;  // Shape: (3, 4), all values are 6.0
 
 // Vector to matrix - broadcasts along rows
-let vector = CpuTensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap();
-let matrix = CpuTensor::<f32>::ones((4, 3));
+let vector = Tensor::<f32>::from_buf(vec![1.0, 2.0, 3.0], vec![3]).unwrap();
+let matrix = Tensor::<f32>::ones((4, 3));
 let result = vector + matrix;  // Shape: (4, 3), each row is [2, 3, 4]
 
 // Row vector + Column vector = Matrix (also, this works with views - for example, slices)
-let row = CpuTensor::<f32>::ones((1, 4));    // Shape: (1, 4)
-let col = CpuTensor::<f32>::ones((3, 1));    // Shape: (3, 1)
+let row = Tensor::<f32>::ones((1, 4));    // Shape: (1, 4)
+let col = Tensor::<f32>::ones((3, 1));    // Shape: (3, 1)
 let result = row.view() + col.view();         // Shape: (3, 4), all 2.0
 ```
 
 ```rust
 // Matrix broadcasts to 3D tensor
-let matrix = CpuTensor::<f32>::ones((3, 4));      // Shape: (3, 4)
-let tensor_3d = CpuTensor::<f32>::ones((2, 3, 4)); // Shape: (2, 3, 4)
+let matrix = Tensor::<f32>::ones((3, 4));      // Shape: (3, 4)
+let tensor_3d = Tensor::<f32>::ones((2, 3, 4)); // Shape: (2, 3, 4)
 let result = matrix + tensor_3d;     // Shape: (2, 3, 4)
 
 // Singleton dimensions broadcast
-let a = CpuTensor::<f32>::ones((1, 3, 1));    // Shape: (1, 3, 1)
-let b = CpuTensor::<f32>::ones((2, 3, 4));    // Shape: (2, 3, 4)
+let a = Tensor::<f32>::ones((1, 3, 1));    // Shape: (1, 3, 1)
+let b = Tensor::<f32>::ones((2, 3, 4));    // Shape: (2, 3, 4)
 let result = a.view() + b;                   // Shape: (2, 3, 4)
 ```
 
 ```rust
 // 4D Broadcasting
-let vector = CpuTensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
-let tensor_4d = CpuTensor::<f32>::ones((3, 4, 5, 2));
+let vector = Tensor::<f32>::from_buf(vec![10.0, 20.0], vec![2]).unwrap();
+let tensor_4d = Tensor::<f32>::ones((3, 4, 5, 2));
 let result = vector + tensor_4d.view();  // Shape: (3, 4, 5, 2)
 
 // Complex singleton pattern
-let a = CpuTensor::<f32>::ones((1, 1, 5, 1));  // Shape: (1, 1, 5, 1)
-let b = CpuTensor::<f32>::ones((2, 3, 5, 4));  // Shape: (2, 3, 5, 4)
+let a = Tensor::<f32>::ones((1, 1, 5, 1));  // Shape: (1, 1, 5, 1)
+let b = Tensor::<f32>::ones((2, 3, 5, 4));  // Shape: (2, 3, 5, 4)
 let result = a + b;               // Shape: (2, 3, 5, 4)
 ```
 
 ```rust
 // Classic: row vector + column vector
-let row = CpuTensor::<f32>::ones((1, 4));      // Shape: (1, 4)
-let col = CpuTensor::<f32>::ones((3, 1));      // Shape: (3, 1)
+let row = Tensor::<f32>::ones((1, 4));      // Shape: (1, 4)
+let col = Tensor::<f32>::ones((3, 1));      // Shape: (3, 1)
 let result = row + col;           // Shape: (3, 4)
 
 // 3D mutual broadcasting
-let a = CpuTensor::<f32>::ones((1, 4, 5));     // Shape: (1, 4, 5)
-let b = CpuTensor::<f32>::ones((3, 1, 5));     // Shape: (3, 1, 5)
+let a = Tensor::<f32>::ones((1, 4, 5));     // Shape: (1, 4, 5)
+let b = Tensor::<f32>::ones((3, 1, 5));     // Shape: (3, 1, 5)
 let result = a + b;               // Shape: (3, 4, 5)
 
 // Complex 4D mutual broadcasting
-let a = CpuTensor::<f32>::ones((1, 3, 1, 5));  // Shape: (1, 3, 1, 5)
-let b = CpuTensor::<f32>::ones((2, 1, 4, 1));  // Shape: (2, 1, 4, 1)
+let a = Tensor::<f32>::ones((1, 3, 1, 5));  // Shape: (1, 3, 1, 5)
+let b = Tensor::<f32>::ones((2, 1, 4, 1));  // Shape: (2, 1, 4, 1)
 let result = a + b;               // Shape: (2, 3, 4, 5)
 ```
 
 #### Inplace Broadcasting Operations
 
 ```rust
-let mut a = CpuTensor::<f32>::zeros((3, 4));
-let b = CpuTensor::<f32>::ones((4,));  // Vector of shape (4)
+let mut a = Tensor::<f32>::zeros((3, 4));
+let b = Tensor::<f32>::ones((4,));  // Vector of shape (4)
 a += b ;  // b broadcasts along rows of a
+```
+
+### Permutations and Transposes
+
+```rust
+// Permutation example
+let tensor = Tensor::<i32>::ones((1, 2, 3)); // Shape: (1, 2, 3)
+let permuted = tensor.permute(vec![2, 0, 1]).unwrap(); // Shape: (3, 1, 2)
+```
+
+```rust
+// Transpose example
+let tensor = Tensor::<f32>::from_buf(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], (2, 3));
+let transposed = tensor.transpose().unwrap(); // Shape: (3, 2) - permutes all dimensions
 ```
