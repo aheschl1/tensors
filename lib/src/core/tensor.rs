@@ -1,5 +1,5 @@
 
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, value::TensorValue, Dim, MetaTensor, Shape, Strides, TensorView, TensorViewMut}};
+use crate::{backend::Backend, core::{idx::Idx, meta::is_contiguous_relaxed, primitives::TensorBase, value::TensorValue, Dim, MetaTensor, MetaTensorView, Shape, Strides, TensorView, TensorViewMut}};
 use super::slice::{Slice, compute_sliced_parameters};
 use thiserror::Error;
 
@@ -26,6 +26,9 @@ pub enum TensorError {
     #[error("broadcast error: {0}")]
     BroadcastError(String),
 
+    #[error("tensor is not contiguous")]
+    ContiguityError,
+
     #[cfg(feature = "cuda")]
     #[error("cuda error: {0}")]
     CudaError(String),
@@ -35,12 +38,14 @@ pub trait AsView<T: TensorValue, B: Backend<T>> {
     /// Returns an immutable view over the tensor data, sharing the same
     /// underlying buffer and metadata (shape/stride/offset) without copying.
     fn view(&self) -> TensorView<'_, T, B>;
+    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T, B>, TensorError>;
 }
 
 pub trait AsViewMut<T: TensorValue, B: Backend<T>> : AsView<T, B> {
     /// Returns a mutable view over the tensor data, sharing the same
     /// underlying buffer and metadata (shape/stride/offset) without copying.
-    fn view_mut<'a>(&'a mut self) -> TensorViewMut<'a, T, B>;
+    fn view_mut(&'_ mut self) -> TensorViewMut<'_, T, B>;
+    fn view_as_mut(&'_ mut self, shape: Shape) -> Result<TensorViewMut<'_, T, B>, TensorError>;
 }
 
 pub trait AsTensor<T: TensorValue, B: Backend<T>> {
@@ -52,20 +57,33 @@ pub trait AsTensor<T: TensorValue, B: Backend<T>> {
 impl<T: TensorValue, B: Backend<T>> AsView<T, B> for TensorBase<T, B> {
     fn view(&self) -> TensorView<'_, T, B> {
         TensorView::<T, B>::from_parts(
-            &self.raw, 
+            &self.buf, 
             &self.backend, 
             self.meta.clone()
         )
     }
+    
+    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T, B>, TensorError> {
+        // collapse into shape
+        if !is_contiguous_relaxed(&self.meta.shape, &self.meta.strides){
+            return Err(TensorError::InvalidShape);
+        }
+
+        panic!()
+    }
 } 
 
 impl<T: TensorValue, B: Backend<T>> AsViewMut<T, B> for TensorBase<T, B> {
-    fn view_mut<'a>(&'a mut self) -> TensorViewMut<'a, T, B> {
+    fn view_mut(&'_ mut self) -> TensorViewMut<'_, T, B> {
         TensorViewMut::<T, B>::from_parts(
-            &mut self.raw, 
+            &mut self.buf, 
             &self.backend, 
             self.meta.clone()
         )
+    }
+    
+    fn view_as_mut(&'_ mut self, shape: Shape) -> Result<TensorViewMut<'_, T, B>, TensorError> {
+        todo!()
     }
 }
 
@@ -73,10 +91,14 @@ impl<T: TensorValue, B: Backend<T>> AsView<T, B> for TensorView<'_, T, B>
 {
     fn view(&self) -> TensorView<'_, T, B> {
         TensorView::from_parts(
-            self.raw, 
+            self.buf, 
             self.backend,
             self.meta.clone()
         )
+    }
+    
+    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T, B>, TensorError> {
+        todo!()
     }
 }
 
@@ -84,21 +106,29 @@ impl<T: TensorValue, B: Backend<T>> AsView<T, B> for TensorViewMut<'_, T, B>
 {
     fn view(&self) -> TensorView<'_, T, B> {
         TensorView::from_parts(
-            self.raw,
+            self.buf,
             self.backend,
             self.meta.clone()
         )
+    }
+    
+    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T, B>, TensorError> {
+        todo!()
     }
 }
 
 impl<T: TensorValue, B: Backend<T>> AsViewMut<T, B> for TensorViewMut<'_, T, B> 
 {
-    fn view_mut<'a>(&'a mut self) -> TensorViewMut<'a, T, B> {
+    fn view_mut(&'_ mut self) -> TensorViewMut<'_, T, B> {
         TensorViewMut::from_parts(
-            self.raw,
+            self.buf,
             self.backend,
             self.meta.clone()
         )
+    }
+    
+    fn view_as_mut(&'_ mut self, shape: Shape) -> Result<TensorViewMut<'_, T, B>, TensorError> {
+        todo!()
     }
 }
 
@@ -113,14 +143,14 @@ impl <T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorBase<T, B> {
             // fast path: already contiguous
             self.clone()
         } else {
-            view_to_contiguous(&self.meta, &self.raw, &self.backend).unwrap()
+            view_to_contiguous(&self.meta, &self.buf, &self.backend).unwrap()
         }
     }
 }
 
 impl<'a, T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorView<'a, T, B> {
     fn owned(&self) -> TensorBase<T, B> {
-        view_to_contiguous(&self.meta, self.raw, self.backend).unwrap()
+        view_to_contiguous(&self.meta, self.buf, self.backend).unwrap()
     }
 
     fn contiguous(&self) -> TensorBase<T, B> {
@@ -130,7 +160,7 @@ impl<'a, T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorView<'a, T, B> 
 
 impl<'a, T: TensorValue, B: Backend<T>> AsTensor<T, B> for TensorViewMut<'a, T, B> {
     fn owned(&self) -> TensorBase<T, B> {
-        view_to_contiguous(&self.meta, self.raw, self.backend).unwrap()
+        view_to_contiguous(&self.meta, self.buf, self.backend).unwrap()
     }
 
     fn contiguous(&self) -> TensorBase<T, B> {
@@ -204,7 +234,7 @@ where B: Backend<T>, V: AsView<T, B>
     fn get<I: Into<Idx>>(&self, idx: I) -> Result<T, TensorError> {
         let view = self.view();
         let idx = logical_to_buffer_idx(&idx.into(), view.meta.strides(), view.meta.offset())?;
-        view.backend.read(view.raw, idx)
+        view.backend.read(view.buf, idx)
     }
 
     /// Creates a new immutable view by fixing `dim` to `idx`, effectively
@@ -223,7 +253,7 @@ where B: Backend<T>, V: AsView<T, B>
             idx
         )?;
         
-        let v = TensorView::from_parts(view.raw, view.backend, MetaTensor::new(new_shape, new_stride, offset));
+        let v = TensorView::from_parts(view.buf, view.backend, MetaTensor::new(new_shape, new_stride, offset));
         Ok(v)
     }
     
@@ -263,14 +293,14 @@ where V: AsViewMut<T, B>
         let (new_shape, new_stride, offset) =
             compute_sliced_parameters(view.meta.shape(), view.meta.strides(), view.meta.offset(), dim, idx)?;
     
-        Ok(TensorViewMut::from_parts(view.raw, view.backend, MetaTensor::new(new_shape, new_stride, offset)))
+        Ok(TensorViewMut::from_parts(view.buf, view.backend, MetaTensor::new(new_shape, new_stride, offset)))
     }
     
     fn set<I: Into<Idx>>(&mut self, idx: I, value: T) -> Result<(), TensorError> {
         let view = self.view_mut();
         let idx = idx.into();
         let buf_idx = logical_to_buffer_idx(&idx, view.meta.strides(), view.meta.offset())?;
-        view.backend.write(view.raw, buf_idx, value)
+        view.backend.write(view.buf, buf_idx, value)
     }
 
     fn permute_mut(&mut self, dims: impl Into<Idx>) -> Result<TensorViewMut<'_, T, B>, TensorError> {

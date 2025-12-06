@@ -9,7 +9,7 @@ use crate::core::tensor::TensorError;
 #[derive(Debug, PartialEq, Eq)]
 pub struct TensorBase<T: TensorValue, B: Backend<T>> {
     pub(crate) backend: B,
-    pub(crate) raw: B::Buf,
+    pub(crate) buf: B::Buf,
     pub(crate) meta: MetaTensor,
     _t: PhantomData<T>,
 }
@@ -17,10 +17,10 @@ pub struct TensorBase<T: TensorValue, B: Backend<T>> {
 impl<B: Backend<T>, T: TensorValue> Clone for TensorBase<T, B> {
     fn clone(&self) -> Self {
         let new_backend = B::new();
-        let new_buffer = new_backend.copy(&self.raw).unwrap();
+        let new_buffer = new_backend.copy(&self.buf).unwrap();
         Self {
             backend: new_backend,
-            raw: new_buffer,
+            buf: new_buffer,
             meta: self.meta.clone(),
             _t: PhantomData,
         }
@@ -42,7 +42,7 @@ impl<T: TensorValue> CudaTensor<T> {
     /// Transfers this tensor from the CUDA backend to a CPU tensor.
     pub fn cpu(&self) -> Result<Tensor<T>, TensorError> {
         let cpu_backend = Cpu;
-        let cpu_buffer = self.backend.dump(&self.raw)?;
+        let cpu_buffer = self.backend.dump(&self.buf)?;
         let cpu = Tensor::from_parts(cpu_backend, cpu_buffer, self.meta.clone());
         Ok(cpu)
     }
@@ -53,7 +53,7 @@ impl<T: TensorValue> Tensor<T> {
     /// Transfers this tensor from the CPU backend to a CUDA tensor.
     pub fn cuda(&self) -> Result<CudaTensor<T>, TensorError> {
         let cuda_backend = crate::backend::cuda::Cuda::construct(0)?;
-        let cuda_buffer = cuda_backend.alloc_from_slice(self.backend.dump(&self.raw)?)?;
+        let cuda_buffer = cuda_backend.alloc_from_slice(self.backend.dump(&self.buf)?)?;
         let cuda = CudaTensor::from_parts(cuda_backend, cuda_buffer, self.meta.clone());
         Ok(cuda)
     }
@@ -69,7 +69,7 @@ where
     T: TensorValue,
     B: Backend<T> + 'a,
 {
-    pub(crate) raw: &'a B::Buf,
+    pub(crate) buf: &'a B::Buf,
     pub(crate) backend: &'a B,
     pub(crate) meta: MetaTensor,
 }
@@ -79,7 +79,7 @@ where
     T: TensorValue,
     B: Backend<T> + 'a,
 {
-    pub(crate) raw: &'a mut B::Buf,
+    pub(crate) buf: &'a mut B::Buf,
     pub(crate) backend: &'a B,
     pub(crate) meta: MetaTensor,
 }
@@ -97,7 +97,7 @@ where
         meta: MetaTensor
     ) -> Self {
         Self {
-            raw,
+            buf: raw,
             backend,
             meta,
         }
@@ -117,7 +117,7 @@ where
         meta: MetaTensor
     ) -> Self {
         Self {
-            raw,
+            buf: raw,
             backend,
             meta
         }
@@ -140,7 +140,7 @@ where
     pub(crate) fn from_parts(backend: B, raw: B::Buf, meta: MetaTensor) -> Self {
         Self {
             backend,
-            raw,
+            buf: raw,
             meta,
             _t: PhantomData,
         }
@@ -165,7 +165,7 @@ where
         let stride = shape_to_stride(&shape);
         Ok(Self {
             backend,
-            raw: buffer,
+            buf: buffer,
             meta: MetaTensor::new(shape, stride, 0),
             _t: PhantomData,
         })

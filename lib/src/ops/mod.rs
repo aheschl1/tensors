@@ -1,6 +1,7 @@
 pub mod base;
 pub mod unary;
 pub mod binary;
+pub mod linalg;
 
 #[cfg(test)]
 mod tests {
@@ -16,7 +17,7 @@ mod tests {
         view += &5;
 
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -26,7 +27,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view += &value;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![11, 12, 13], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -35,7 +36,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view += -5;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // same for sub
@@ -45,7 +46,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view -= 5;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![5, 15, 25], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -55,7 +56,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view -= &value;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![0, 10, 20], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -64,7 +65,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view -= -5;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![6, 7, 8], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // same for mul
@@ -75,7 +76,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view *= 5;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![5, 10, 15], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -85,7 +86,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view *= &value;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![10, 20, 30], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     #[test]
@@ -94,7 +95,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view *= -5;
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![-5, -10, -15], vec![3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // Tests with reshaping/slicing
@@ -127,7 +128,7 @@ mod tests {
         
         // Only the sliced part should be modified
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![1, 2, 3, 104, 105, 106], vec![2, 3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // #[test]
@@ -170,7 +171,7 @@ mod tests {
         slice *= 10;
         
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![10, 20, 30, 40, 5, 6, 7, 8], vec![2, 2, 2]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // #[test]
@@ -199,7 +200,7 @@ mod tests {
         col_slice *= 3;
         
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![1, 6, 3, 4, 15, 6], vec![2, 3]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // #[test]
@@ -236,7 +237,7 @@ mod tests {
         row_slice += value;
         
         let expected = TensorBase::<i32, Cpu>::from_buf(vec![1, 2, 3, 4, 1005, 1006, 7, 8], vec![2, 2, 2]).unwrap();
-        assert_eq!(tensor.raw.clone(), expected.raw);
+        assert_eq!(tensor.buf.clone(), expected.buf);
     }
 
     // Tests for non-inplace operations (consume view, return new tensor)
@@ -248,11 +249,11 @@ mod tests {
         let result = view + 5;
         
         // Result should be a new tensor with added values
-        assert_eq!(result.raw, vec![6, 7, 8].into_boxed_slice());
+        assert_eq!(result.buf, vec![6, 7, 8].into_boxed_slice());
         assert_eq!(*result.shape(), vec![3]);
         
         // Original tensor should be unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3].into_boxed_slice());
     }
 
     #[test]
@@ -262,8 +263,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view + value;
         
-        assert_eq!(result.raw, vec![11, 12, 13].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(result.buf, vec![11, 12, 13].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3].into_boxed_slice());
     }
 
     #[test]
@@ -272,8 +273,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view - 5;
         
-        assert_eq!(result.raw, vec![5, 15, 25].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![10, 20, 30].into_boxed_slice());
+        assert_eq!(result.buf, vec![5, 15, 25].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![10, 20, 30].into_boxed_slice());
     }
 
     #[test]
@@ -283,8 +284,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view - value;
         
-        assert_eq!(result.raw, vec![0, 10, 20].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![10, 20, 30].into_boxed_slice());
+        assert_eq!(result.buf, vec![0, 10, 20].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![10, 20, 30].into_boxed_slice());
     }
 
     #[test]
@@ -293,8 +294,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view * 5;
         
-        assert_eq!(result.raw, vec![5, 10, 15].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(result.buf, vec![5, 10, 15].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3].into_boxed_slice());
     }
 
     #[test]
@@ -304,8 +305,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view * &value;
         
-        assert_eq!(result.raw, vec![10, 20, 30].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(result.buf, vec![10, 20, 30].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3].into_boxed_slice());
     }
 
     #[test]
@@ -316,12 +317,12 @@ mod tests {
         let result = slice + 100;
         
         // Result should be a new 1D tensor with shape [3]
-        assert_eq!(result.raw, vec![104, 105, 106].into_boxed_slice());
+        assert_eq!(result.buf, vec![104, 105, 106].into_boxed_slice());
         assert_eq!(*result.shape(), vec![3]);
         assert!(result.is_contiguous());
         
         // Original tensor should be unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
 
     #[test]
@@ -336,12 +337,12 @@ mod tests {
         let result = col_slice * 3;
         
         // Result should be a new contiguous tensor
-        assert_eq!(result.raw, vec![6, 15].into_boxed_slice());
+        assert_eq!(result.buf, vec![6, 15].into_boxed_slice());
         assert_eq!(*result.shape(), vec![2]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
 
     // #[test]
@@ -365,8 +366,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view + (-5);
         
-        assert_eq!(result.raw, vec![5, 15, 25].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![10, 20, 30].into_boxed_slice());
+        assert_eq!(result.buf, vec![5, 15, 25].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![10, 20, 30].into_boxed_slice());
     }
 
     #[test]
@@ -375,8 +376,8 @@ mod tests {
         let view = tensor.view_mut();
         let result = view * (-5);
         
-        assert_eq!(result.raw, vec![-5, -10, -15].into_boxed_slice());
-        assert_eq!(tensor.raw, vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(result.buf, vec![-5, -10, -15].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3].into_boxed_slice());
     }
 
     #[test]
@@ -389,12 +390,12 @@ mod tests {
         
         let result = row_slice + 1000;
         
-        assert_eq!(result.raw, vec![1005, 1006].into_boxed_slice());
+        assert_eq!(result.buf, vec![1005, 1006].into_boxed_slice());
         assert_eq!(*result.shape(), vec![2]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4, 5, 6, 7, 8].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4, 5, 6, 7, 8].into_boxed_slice());
     }
 
     #[test]
@@ -403,12 +404,12 @@ mod tests {
         let view = tensor.view_mut();
         let result = view * 10;
         
-        assert_eq!(result.raw, vec![10, 20, 30, 40].into_boxed_slice());
+        assert_eq!(result.buf, vec![10, 20, 30, 40].into_boxed_slice());
         assert_eq!(*result.shape(), vec![2, 2]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4].into_boxed_slice());
     }
 
     #[test]
@@ -417,12 +418,12 @@ mod tests {
         let view = tensor.view_mut();
         let result = view - 50;
         
-        assert_eq!(result.raw, vec![50].into_boxed_slice());
+        assert_eq!(result.buf, vec![50].into_boxed_slice());
         assert_eq!(*result.shape(), vec![]);
         assert!(result.is_scalar());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![100].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![100].into_boxed_slice());
     }
 
     // Tests for non-inplace operations on non-mutable views (TensorView)
@@ -433,11 +434,11 @@ mod tests {
         // Call operation directly on view() without storing in variable
         let result = tensor.view() + 10;
         
-        assert_eq!(result.raw, vec![11, 12, 13, 14].into_boxed_slice());
+        assert_eq!(result.buf, vec![11, 12, 13, 14].into_boxed_slice());
         assert_eq!(*result.shape(), vec![4]);
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4].into_boxed_slice());
     }
 
     #[test]
@@ -446,10 +447,10 @@ mod tests {
         let value = 100;
         let result = tensor.view() + value;
         
-        assert_eq!(result.raw, vec![105, 110, 115].into_boxed_slice());
+        assert_eq!(result.buf, vec![105, 110, 115].into_boxed_slice());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![5, 10, 15].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![5, 10, 15].into_boxed_slice());
     }
 
     #[test]
@@ -457,11 +458,11 @@ mod tests {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![100, 200, 300], vec![3]).unwrap();
         let result = tensor.view() - 50;
         
-        assert_eq!(result.raw, vec![50, 150, 250].into_boxed_slice());
+        assert_eq!(result.buf, vec![50, 150, 250].into_boxed_slice());
         assert_eq!(*result.shape(), vec![3]);
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![100, 200, 300].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![100, 200, 300].into_boxed_slice());
     }
 
     #[test]
@@ -470,12 +471,12 @@ mod tests {
         // Slice to get first row, then subtract
         let result = tensor.view().slice(0, 0..0).unwrap() - 5;
         
-        assert_eq!(result.raw, vec![5, 15, 25].into_boxed_slice());
+        assert_eq!(result.buf, vec![5, 15, 25].into_boxed_slice());
         assert_eq!(*result.shape(), vec![3]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![10, 20, 30, 40, 50, 60].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![10, 20, 30, 40, 50, 60].into_boxed_slice());
     }
 
     #[test]
@@ -483,11 +484,11 @@ mod tests {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![2, 4, 6, 8], vec![4]).unwrap();
         let result = tensor.view() * 3;
         
-        assert_eq!(result.raw, vec![6, 12, 18, 24].into_boxed_slice());
+        assert_eq!(result.buf, vec![6, 12, 18, 24].into_boxed_slice());
         assert_eq!(*result.shape(), vec![4]);
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![2, 4, 6, 8].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![2, 4, 6, 8].into_boxed_slice());
     }
 
     #[test]
@@ -495,11 +496,11 @@ mod tests {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![1, 2, 3, 4, 5, 6], vec![2, 3]).unwrap();
         let result = tensor.view() * 10;
         
-        assert_eq!(result.raw, vec![10, 20, 30, 40, 50, 60].into_boxed_slice());
+        assert_eq!(result.buf, vec![10, 20, 30, 40, 50, 60].into_boxed_slice());
         assert_eq!(*result.shape(), vec![2, 3]);
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
 
     // #[test]
@@ -520,12 +521,12 @@ mod tests {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![999], vec![]).unwrap();
         let result = tensor.view() - 99;
         
-        assert_eq!(result.raw, vec![900].into_boxed_slice());
+        assert_eq!(result.buf, vec![900].into_boxed_slice());
         assert_eq!(*result.shape(), vec![]);
         assert!(result.is_scalar());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![999].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![999].into_boxed_slice());
     }
 
     #[test]
@@ -534,12 +535,12 @@ mod tests {
         // Get column (non-contiguous) then multiply
         let result = tensor.view().slice(1, 1..1).unwrap() * 5;
         
-        assert_eq!(result.raw, vec![10, 25].into_boxed_slice());
+        assert_eq!(result.buf, vec![10, 25].into_boxed_slice());
         assert_eq!(*result.shape(), vec![2]);
         assert!(result.is_contiguous());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
 
     // #[test]
@@ -563,10 +564,10 @@ mod tests {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![-10, -20, -30], vec![3]).unwrap();
         let result = tensor.view() - 5;
         
-        assert_eq!(result.raw, vec![-15, -25, -35].into_boxed_slice());
+        assert_eq!(result.buf, vec![-15, -25, -35].into_boxed_slice());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![-10, -20, -30].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![-10, -20, -30].into_boxed_slice());
     }
 
     #[test]
@@ -575,10 +576,10 @@ mod tests {
         let multiplier = 2;
         let result = tensor.view() * &multiplier;
         
-        assert_eq!(result.raw, vec![14, 28, 42].into_boxed_slice());
+        assert_eq!(result.buf, vec![14, 28, 42].into_boxed_slice());
         
         // Original unchanged
-        assert_eq!(tensor.raw, vec![7, 14, 21].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![7, 14, 21].into_boxed_slice());
     }
 
     // ============================================================================
@@ -593,7 +594,7 @@ mod tests {
         assert!(tensor.is_scalar());
         let mut view = tensor.view_mut();
         view += 10;
-        assert_eq!(tensor.raw, vec![52].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![52].into_boxed_slice());
     }
 
     #[test]
@@ -601,7 +602,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![7], vec![]).unwrap();
         let mut view = tensor.view_mut();
         view *= 6;
-        assert_eq!(tensor.raw, vec![42].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![42].into_boxed_slice());
     }
 
     #[test]
@@ -609,7 +610,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![100], vec![]).unwrap();
         let mut view = tensor.view_mut();
         view -= 58;
-        assert_eq!(tensor.raw, vec![42].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![42].into_boxed_slice());
     }
 
     #[test]
@@ -618,7 +619,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view *= -3;
         view += 5;
-        assert_eq!(tensor.raw, vec![35].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![35].into_boxed_slice());
     }
 
     #[test]
@@ -628,16 +629,16 @@ mod tests {
         view += 42;
         view *= 0;
         view += 10;
-        assert_eq!(tensor.raw, vec![10].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![10].into_boxed_slice());
     }
 
     #[test]
     fn test_scalar_non_inplace() {
         let tensor = TensorBase::<i32, Cpu>::from_buf(vec![100], vec![]).unwrap();
         let result = tensor.view() + 50;
-        assert_eq!(result.raw, vec![150].into_boxed_slice());
+        assert_eq!(result.buf, vec![150].into_boxed_slice());
         assert!(result.is_scalar());
-        assert_eq!(tensor.raw, vec![100].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![100].into_boxed_slice());
     }
 
     // --- Single Element Tensor Tests ---
@@ -648,7 +649,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view += 10;
         view *= 2;
-        assert_eq!(tensor.raw, vec![30].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![30].into_boxed_slice());
     }
 
     #[test]
@@ -656,7 +657,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![8], vec![1, 1]).unwrap();
         let mut view = tensor.view_mut();
         view *= 5;
-        assert_eq!(tensor.raw, vec![40].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![40].into_boxed_slice());
     }
 
     #[test]
@@ -665,7 +666,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view += 7;
         view *= 3;
-        assert_eq!(tensor.raw, vec![30].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![30].into_boxed_slice());
     }
 
     // --- Non-Square Tensor Tests ---
@@ -675,7 +676,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], vec![9, 1]).unwrap();
         let mut view = tensor.view_mut();
         view *= 2;
-        assert_eq!(tensor.raw, vec![2, 4, 6, 8, 10, 12, 14, 16, 18].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![2, 4, 6, 8, 10, 12, 14, 16, 18].into_boxed_slice());
     }
 
     #[test]
@@ -683,7 +684,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], vec![1, 9]).unwrap();
         let mut view = tensor.view_mut();
         view += 10;
-        assert_eq!(tensor.raw, vec![11, 12, 13, 14, 15, 16, 17, 18, 19].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![11, 12, 13, 14, 15, 16, 17, 18, 19].into_boxed_slice());
     }
 
     #[test]
@@ -695,7 +696,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view *= 3;
         assert_eq!(
-            tensor.raw, 
+            tensor.buf, 
             vec![3, 6, 9, 12, 15, 18, 21, 24, 27, 30].into_boxed_slice()
         );
     }
@@ -709,7 +710,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view -= 1;
         assert_eq!(
-            tensor.raw, 
+            tensor.buf, 
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9].into_boxed_slice()
         );
     }
@@ -722,7 +723,7 @@ mod tests {
         view += 100;
         
         let expected: Vec<i32> = (101..=124).collect();
-        assert_eq!(tensor.raw, expected.into_boxed_slice());
+        assert_eq!(tensor.buf, expected.into_boxed_slice());
     }
 
     #[test]
@@ -739,7 +740,7 @@ mod tests {
             vec![1, 2, 3, 4, 50, 60, 70, 80, 9, 10, 11, 12], 
             vec![3, 4]
         ).unwrap();
-        assert_eq!(tensor.raw, expected.raw);
+        assert_eq!(tensor.buf, expected.buf);
     }
 
     // --- Edge Value Tests ---
@@ -750,7 +751,7 @@ mod tests {
         let mut view = tensor.view_mut();
         view += 10;
         view *= 2;
-        assert_eq!(tensor.raw, vec![20, 20, 20, 20].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![20, 20, 20, 20].into_boxed_slice());
     }
 
     #[test]
@@ -758,7 +759,7 @@ mod tests {
         let mut tensor = TensorBase::<i32, Cpu>::from_buf(vec![5, 10, 15, 20], vec![4]).unwrap();
         let mut view = tensor.view_mut();
         view *= 0;
-        assert_eq!(tensor.raw, vec![0, 0, 0, 0].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![0, 0, 0, 0].into_boxed_slice());
     }
 
     #[test]
@@ -772,7 +773,7 @@ mod tests {
         view += 10;
         
         assert_eq!(
-            tensor.raw, 
+            tensor.buf, 
             vec![0, 30, -20, 50, -40, 70].into_boxed_slice()
         );
     }
@@ -787,7 +788,7 @@ mod tests {
         view += 500_000;
         
         assert_eq!(
-            tensor.raw, 
+            tensor.buf, 
             vec![1_500_000, 2_500_000, 3_500_000].into_boxed_slice()
         );
     }
@@ -806,7 +807,7 @@ mod tests {
         
         let expected = vec![4.0, 6.0, 8.0, 10.0];
         for (i, &exp) in expected.iter().enumerate() {
-            assert!((tensor.raw[i] - exp).abs() < 1e-6);
+            assert!((tensor.buf[i] - exp).abs() < 1e-6);
         }
     }
 
@@ -822,7 +823,7 @@ mod tests {
         
         let expected = vec![3.0, 5.0, 7.0, 9.0];
         for (i, &exp) in expected.iter().enumerate() {
-            assert!((tensor.raw[i] - exp).abs() < 1e-10);
+            assert!((tensor.buf[i] - exp).abs() < 1e-10);
         }
     }
 
@@ -836,7 +837,7 @@ mod tests {
         view -= 50;
         view *= 3;
         
-        assert_eq!(tensor.raw, vec![150, 450, 750, 1050].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![150, 450, 750, 1050].into_boxed_slice());
     }
 
     #[test]
@@ -849,7 +850,7 @@ mod tests {
         view += 5;
         view *= 2;
         
-        assert_eq!(tensor.raw, vec![30, 50, 70, 90].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![30, 50, 70, 90].into_boxed_slice());
     }
 
     #[test]
@@ -862,7 +863,7 @@ mod tests {
         view *= 10;
         view += 5;
         
-        assert_eq!(tensor.raw, vec![15, 25, 35, 45, 55, 65].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![15, 25, 35, 45, 55, 65].into_boxed_slice());
     }
 
     // --- Complex Non-Contiguous View Tests ---
@@ -884,7 +885,7 @@ mod tests {
             vec![1, 204, 3, 4, 210, 6, 7, 216, 9, 10, 222, 12], 
             vec![4, 3]
         ).unwrap();
-        assert_eq!(tensor.raw, expected.raw);
+        assert_eq!(tensor.buf, expected.buf);
     }
 
     // #[test]
@@ -936,7 +937,7 @@ mod tests {
             expected_data[i - 1] += 100;
         }
         
-        assert_eq!(tensor.raw, expected_data.into_boxed_slice());
+        assert_eq!(tensor.buf, expected_data.into_boxed_slice());
     }
     #[test]
     fn test_3d_noncontiguous_slice_view() {
@@ -970,7 +971,7 @@ mod tests {
         view += 10;
         
         let expected: Vec<i32> = (11..=26).collect();
-        assert_eq!(tensor.raw, expected.into_boxed_slice());
+        assert_eq!(tensor.buf, expected.into_boxed_slice());
     }
 
     #[test]
@@ -987,7 +988,7 @@ mod tests {
             expected[i] *= 10;
         }
         
-        assert_eq!(tensor.raw, expected.into_boxed_slice());
+        assert_eq!(tensor.buf, expected.into_boxed_slice());
     }
 
     #[test]
@@ -999,7 +1000,7 @@ mod tests {
         view += 5;
         
         let expected: Vec<i32> = (1..=32).map(|x| x * 2 + 5).collect();
-        assert_eq!(tensor.raw, expected.into_boxed_slice());
+        assert_eq!(tensor.buf, expected.into_boxed_slice());
     }
 
     // --- Operation Chain Tests ---
@@ -1020,7 +1021,7 @@ mod tests {
         view -= 10;  // [20, 32, 44, 56]
         view *= 1;   // [20, 32, 44, 56]
         
-        assert_eq!(tensor.raw, vec![20, 32, 44, 56].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![20, 32, 44, 56].into_boxed_slice());
     }
 
     #[test]
@@ -1033,7 +1034,7 @@ mod tests {
         
         // Non-inplace
         let result1 = tensor.view() * 2;
-        assert_eq!(result1.raw, vec![20, 30, 40].into_boxed_slice());
+        assert_eq!(result1.buf, vec![20, 30, 40].into_boxed_slice());
         
         // Inplace again
         let mut view2 = tensor.view_mut();
@@ -1041,10 +1042,10 @@ mod tests {
         
         // Non-inplace again
         let result2 = tensor.view() + 10;
-        assert_eq!(result2.raw, vec![40, 55, 70].into_boxed_slice());
+        assert_eq!(result2.buf, vec![40, 55, 70].into_boxed_slice());
         
         // Original tensor should reflect inplace ops
-        assert_eq!(tensor.raw, vec![30, 45, 60].into_boxed_slice());
+        assert_eq!(tensor.buf, vec![30, 45, 60].into_boxed_slice());
     }
 
     #[test]
@@ -1072,7 +1073,7 @@ mod tests {
             vec![11, 12, 13, 20, 25, 30], 
             vec![2, 3]
         ).unwrap();
-        assert_eq!(tensor.raw, expected.raw);
+        assert_eq!(tensor.buf, expected.buf);
     }
 
     // --- Float Edge Cases ---
@@ -1088,7 +1089,7 @@ mod tests {
         
         let expected = vec![0.1, 0.2, 0.3];
         for (i, &exp) in expected.iter().enumerate() {
-            assert!((tensor.raw[i] - exp).abs() < 1e-6);
+            assert!((tensor.buf[i] - exp).abs() < 1e-6);
         }
     }
 
@@ -1103,7 +1104,7 @@ mod tests {
         
         let expected = vec![1.0, 2.0, 3.0];
         for (i, &exp) in expected.iter().enumerate() {
-            assert!((tensor.raw[i] - exp).abs() < 1e-10);
+            assert!((tensor.buf[i] - exp).abs() < 1e-10);
         }
     }
 
@@ -1117,10 +1118,10 @@ mod tests {
         view += 5;
         
         // Check a few values
-        assert_eq!(tensor.raw[0], 6);
-        assert_eq!(tensor.raw[1], 7);
-        assert_eq!(tensor.raw[1998], 2004);
-        assert_eq!(tensor.raw[1999], 2005);
+        assert_eq!(tensor.buf[0], 6);
+        assert_eq!(tensor.buf[1], 7);
+        assert_eq!(tensor.buf[1998], 2004);
+        assert_eq!(tensor.buf[1999], 2005);
     }
 
     #[test]
@@ -1131,10 +1132,10 @@ mod tests {
         view *= 2;
         
         // Check a few values
-        assert_eq!(tensor.raw[0], 2);
-        assert_eq!(tensor.raw[999], 2000);
-        assert_eq!(tensor.raw[1000], 2002);
-        assert_eq!(tensor.raw[1999], 4000);
+        assert_eq!(tensor.buf[0], 2);
+        assert_eq!(tensor.buf[999], 2000);
+        assert_eq!(tensor.buf[1000], 2002);
+        assert_eq!(tensor.buf[1999], 4000);
     }
 
         // BROADCASTING TESTS

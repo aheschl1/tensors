@@ -29,9 +29,9 @@ macro_rules! impl_add_assign {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (&mut self.raw as *mut B::Buf, &meta_a),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (&mut self.buf as *mut B::Buf, &meta_a),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -62,9 +62,9 @@ macro_rules! impl_add_assign {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (&mut self.raw as *mut B::Buf, &meta_a),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (&mut self.buf as *mut B::Buf, &meta_a),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -95,9 +95,9 @@ macro_rules! impl_add_assign {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (self.raw as *mut B::Buf, &meta_a),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (self.buf as *mut B::Buf, &meta_a),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -128,9 +128,9 @@ macro_rules! impl_add_assign {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (self.raw as *mut B::Buf, &meta_a),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (self.buf as *mut B::Buf, &meta_a),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -161,9 +161,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -191,9 +191,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -221,9 +221,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -251,9 +251,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -281,9 +281,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -311,9 +311,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (&self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (&self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -341,9 +341,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (&rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (&rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }
@@ -371,9 +371,9 @@ macro_rules! impl_add {
 
                 unsafe {
                     self.backend.broadcast(
-                        (self.raw as *const B::Buf, &meta_a),
-                        (rhs.raw as *const B::Buf, &meta_b),
-                        (&mut result.raw as *mut B::Buf, &result.meta),
+                        (self.buf as *const B::Buf, &meta_a),
+                        (rhs.buf as *const B::Buf, &meta_b),
+                        (&mut result.buf as *mut B::Buf, &result.meta),
                         OpType::Add,
                     ).unwrap();
                 }

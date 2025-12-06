@@ -1403,7 +1403,7 @@ mod tests {
         
         // Should have same shape and values
         assert_eq!(owned.shape(), tensor.shape());
-        assert_eq!(owned.raw, tensor.raw);
+        assert_eq!(owned.buf, tensor.buf);
         assert!(owned.is_contiguous());
     }
 
@@ -1424,7 +1424,7 @@ mod tests {
         // Owned should be contiguous with correct values
         assert!(owned.is_contiguous());
         assert_eq!(*owned.shape(), vec![2]);
-        assert_eq!(owned.raw, vec![2, 5].into_boxed_slice());
+        assert_eq!(owned.buf, vec![2, 5].into_boxed_slice());
         assert_eq!(index_tensor(Idx::At(0), &owned.view()).unwrap(), 2);
         assert_eq!(index_tensor(Idx::At(1), &owned.view()).unwrap(), 5);
     }
@@ -1441,7 +1441,7 @@ mod tests {
         let owned = row_slice.owned();
         
         assert_eq!(*owned.shape(), vec![3]);
-        assert_eq!(owned.raw, vec![4, 5, 6].into_boxed_slice());
+        assert_eq!(owned.buf, vec![4, 5, 6].into_boxed_slice());
     }
 
     // #[test]
@@ -1468,7 +1468,7 @@ mod tests {
         let owned = depth_slice.owned();
         
         assert_eq!(*owned.shape(), vec![2, 2]);
-        assert_eq!(owned.raw, vec![5, 6, 7, 8].into_boxed_slice());
+        assert_eq!(owned.buf, vec![5, 6, 7, 8].into_boxed_slice());
         assert!(owned.is_contiguous());
     }
 
@@ -1480,7 +1480,7 @@ mod tests {
         let owned = view_mut.owned();
         
         assert_eq!(*owned.shape(), vec![2, 3]);
-        assert_eq!(owned.raw, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
+        assert_eq!(owned.buf, vec![1, 2, 3, 4, 5, 6].into_boxed_slice());
     }
 
     #[test]
@@ -1488,8 +1488,8 @@ mod tests {
         let tensor = Tensor::<f32>::zeros((1, 1));
 
         assert_eq!(*tensor.shape(), vec![1, 1]);
-        assert_eq!(tensor.raw.len(), 1);
-        assert_eq!(tensor.raw[0], 0.0);
+        assert_eq!(tensor.buf.len(), 1);
+        assert_eq!(tensor.buf[0], 0.0);
 
     }
 

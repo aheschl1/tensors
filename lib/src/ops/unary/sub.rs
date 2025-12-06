@@ -8,7 +8,7 @@ impl<'a, T, B> SubAssign<T> for TensorViewMut<'a, T, B>
 {
     fn sub_assign(&mut self, rhs: T) {
         self.backend.apply_elementwise(
-            self.raw, 
+            self.buf, 
             (OpType::Sub, rhs),
             &self.meta
         ).unwrap();
@@ -21,7 +21,7 @@ impl<'a, T, B> SubAssign<&T> for TensorViewMut<'a, T, B>
 {
     fn sub_assign(&mut self, rhs: &T) {
         self.backend.apply_elementwise(
-            self.raw, 
+            self.buf, 
             (OpType::Sub, *rhs),
             &self.meta
         ).unwrap();
@@ -34,7 +34,7 @@ impl<T, B> SubAssign<T> for TensorBase<T, B>
 {
     fn sub_assign(&mut self, rhs: T) {
         self.backend.apply_elementwise(
-            &mut self.raw, 
+            &mut self.buf, 
             (OpType::Sub, rhs),
             &self.meta
         ).unwrap();
@@ -47,7 +47,7 @@ impl<T, B> SubAssign<&T> for TensorBase<T, B>
 {
     fn sub_assign(&mut self, rhs: &T) {
         self.backend.apply_elementwise(
-            &mut self.raw, 
+            &mut self.buf, 
             (OpType::Sub, *rhs),
             &self.meta
         ).unwrap();
