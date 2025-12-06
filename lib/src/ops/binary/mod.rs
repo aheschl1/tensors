@@ -12,8 +12,8 @@ pub(crate) fn compute_broadcasted_params(
 ) -> Result<(Vec<usize>, Vec<isize>, Vec<isize>), TensorError>{
     let mut sa: Vec<usize> = a.shape().clone().into();
     let mut sb: Vec<usize> = b.shape().clone().into();
-    let mut stra: Vec<isize> = a.strides().clone();
-    let mut strb: Vec<isize> = b.strides().clone();
+    let mut stra: Vec<isize> = a.strides().clone().into();
+    let mut strb: Vec<isize> = b.strides().clone().into();
 
     if sa.len() < sb.len() {
         let pad = sb.len() - sa.len();

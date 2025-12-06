@@ -51,8 +51,8 @@ fn get_matmul_params(
     let squashed_left_shape = lhs_meta.shape.squash_leading_dims(lhs_meta.rank() - 2);
     let squashed_right_shape = rhs_meta.shape.squash_leading_dims(rhs_meta.rank() - 2);
 
-    // let squashed_left_stride = lhs_meta.strides.squash_leading_dims(lhs_meta.rank() - 2);
-    // let squashed_right_stride = rhs_meta.strides.squash_leading_dims(rhs_meta.rank() - 2);
+    let squashed_left_stride = lhs_meta.strides.squash_leading_dims(lhs_meta.rank() - 2);
+    let squashed_right_stride = rhs_meta.strides.squash_leading_dims(rhs_meta.rank() - 2);
 
     panic!()
 }

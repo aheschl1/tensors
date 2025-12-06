@@ -358,9 +358,9 @@ impl<T: TensorValue> Backend<T> for Cuda {
         // let rshape_buf = self.alloc_from_slice(rmeta.shape.0.clone().into_boxed_slice())?;
         let dshape_buf = self.alloc_from_slice(dmeta.shape.0.clone().into_boxed_slice())?;
         
-        let lstride_buf = self.alloc_from_slice(lmeta.strides().clone().into_boxed_slice())?;
-        let rstride_buf = self.alloc_from_slice(rmeta.strides().clone().into_boxed_slice())?;
-        let dstride_buf = self.alloc_from_slice(dmeta.strides().clone().into_boxed_slice())?;
+        let lstride_buf = self.alloc_from_slice(lmeta.strides.0.clone().into_boxed_slice())?;
+        let rstride_buf = self.alloc_from_slice(rmeta.strides.0.clone().clone().into_boxed_slice())?;
+        let dstride_buf = self.alloc_from_slice(dmeta.strides.0.clone().into_boxed_slice())?;
 
         let (lstride_ptr, _) = lstride_buf.ptr.device_ptr(&stream);
         let (rstride_ptr, _) = rstride_buf.ptr.device_ptr(&stream);
