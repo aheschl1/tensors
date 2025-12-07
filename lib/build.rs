@@ -313,7 +313,7 @@ fn find_cuda_lib_path() -> Option<PathBuf> {
 fn find_cuda_kernel_files() -> Vec<PathBuf> {
     use std::fs;
     
-    let kernels_dir = PathBuf::from("src/cuda/kernels");
+    let kernels_dir = PathBuf::from("cuda/kernels");
     let mut cu_files = Vec::new();
     
     // Recursively find all .cu files, excluding legacy folder
@@ -360,16 +360,16 @@ fn build_cuda_kernels() {
     let kernel_files = find_cuda_kernel_files();
     
     if kernel_files.is_empty() {
-        panic!("No CUDA kernel files (.cu) found in src/cuda/kernels/");
+        panic!("No CUDA kernel files (.cu) found in cuda/kernels/");
     }
     
     println!("Found {} CUDA kernel file(s)", kernel_files.len());
     
-    println!("cargo:rerun-if-changed=src/cuda/include/kernels.h");
-    println!("cargo:rerun-if-changed=src/cuda/include/common.h");
-    println!("cargo:rerun-if-changed=src/cuda/include/unary.h");
-    println!("cargo:rerun-if-changed=src/cuda/include/binary.h");
-    // println!("cargo:rerun-if-changed=src/cuda/include/elementwise.h");
+    println!("cargo:rerun-if-changed=cuda/include/kernels.h");
+    println!("cargo:rerun-if-changed=cuda/include/common.h");
+    println!("cargo:rerun-if-changed=cuda/include/unary.h");
+    println!("cargo:rerun-if-changed=cuda/include/binary.h");
+    // println!("cargo:rerun-if-changed=cuda/include/elementwise.h");
     for kernel_file in &kernel_files {
         println!("cargo:rerun-if-changed={}", kernel_file.display());
     }
@@ -381,7 +381,7 @@ fn build_cuda_kernels() {
     let code = "sm_86";
 
     // Build add.cu to PTX (for runtime JIT compilation in tests)
-    let add_cu = PathBuf::from("src/cuda/kernels/legacy/add.cu");
+    let add_cu = PathBuf::from("cuda/kernels/legacy/add.cu");
     if add_cu.exists() {
         let ptx_file = out_dir.join("add.ptx");
 
@@ -393,7 +393,7 @@ fn build_cuda_kernels() {
             .arg(format!("-arch={}", arch))
             .arg(format!("-code={}", code))
             .arg("-I")
-            .arg("src/cuda/include")
+            .arg("cuda/include")
             .status()
             .unwrap();
 
@@ -424,7 +424,7 @@ fn build_cuda_kernels() {
             .arg(kernel_file)
             .arg(format!("-arch={}", arch))
             .arg("-I")
-            .arg("src/cuda/include") 
+            .arg("cuda/include") 
             .arg("--compiler-options")
             .arg("-fPIC")
             .status()
@@ -477,7 +477,7 @@ fn build_cuda_kernels() {
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
-        .header("src/cuda/include/kernels.h")
+        .header("cuda/include/kernels.h")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .clang_arg("-x")
