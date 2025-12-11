@@ -3,7 +3,7 @@
 #include "../../include/matmul.h"
 
 template <typename T>
-__global__ void matmul_kernel(
+__global__ void matmul_kernel_row_major(
     const T* __restrict__ A,
     const T* __restrict__ B,
     T* __restrict__ C,
@@ -31,6 +31,34 @@ __global__ void matmul_kernel(
 }
 
 template <typename T>
+__global__ void matmul_kernel_column_major(
+    const T* __restrict__ A,
+    const T* __restrict__ B,
+    T* __restrict__ C,
+    size_t M,
+    size_t N,
+    size_t K,
+    size_t lda,
+    size_t ldb,
+    size_t ldc
+) {
+    for (size_t row = blockIdx.y * blockDim.y + threadIdx.y; 
+         row < M; 
+         row += blockDim.y * gridDim.y) {
+        for (size_t col = blockIdx.x * blockDim.x + threadIdx.x; 
+             col < N; 
+             col += blockDim.x * gridDim.x) {
+            
+            T value = static_cast<T>(0);
+            for (size_t k = 0; k < K; ++k) {
+                value += A[row + k * lda] * B[k + col * ldb];
+            }
+            C[row * ldc + col] = value;
+        }
+    }
+}
+
+template <typename T>
 void launch_matmul_op(
     const T* A,
     const T* B,
@@ -41,6 +69,7 @@ void launch_matmul_op(
     size_t lda,
     size_t ldb,
     size_t ldc,
+    ContiguityType contiguity,
     unsigned int block_size
 ) {
     // block_size = ALIGN_BLOCK_SIZE(block_size);
@@ -52,7 +81,11 @@ void launch_matmul_op(
         std::min((unsigned int)((M + block.y - 1) / block.y), 65535u)
     );
     
-    matmul_kernel<T><<<grid, block>>>(A, B, C, M, N, K, lda, ldb, ldc);
+    if (contiguity == ROW_MAJOR) {
+        matmul_kernel_row_major<T><<<grid, block>>>(A, B, C, M, N, K, lda, ldb, ldc);
+    } else { // COLUMN_MAJOR
+        matmul_kernel_column_major<T><<<grid, block>>>(A, B, C, M, N, K, lda, ldb, ldc);
+    }
 }
 
 #define DECLARE_MATMUL_LAUNCHER(TYPE, SUFFIX) \
@@ -60,9 +93,10 @@ void launch_matmul_op(
         const TYPE* A, const TYPE* B, TYPE* C, \
         size_t M, size_t N, size_t K, \
         size_t lda, size_t ldb, size_t ldc, \
+        ContiguityType contiguity, \
         unsigned int block_size \
     ) { \
-        launch_matmul_op<TYPE>(A, B, C, M, N, K, lda, ldb, ldc, block_size); \
+        launch_matmul_op<TYPE>(A, B, C, M, N, K, lda, ldb, ldc, contiguity, block_size); \
     }
 
 DECLARE_MATMUL_LAUNCHER(uint8_t,  u8)

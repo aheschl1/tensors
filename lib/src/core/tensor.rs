@@ -209,7 +209,7 @@ pub trait TensorAccess<T: TensorValue, B: Backend<T>>: Sized {
     }
 
     fn permute(&self, dims: impl Into<Idx>) -> Result<TensorView<'_, T, B>, TensorError>;
-    fn transpose(&self) -> Result<TensorView<'_, T, B>, TensorError>;
+    fn transpose(&self) -> TensorView<'_, T, B>;
     fn unsqueeze_at(&self, dim: Dim) -> Result<TensorView<'_, T, B>, TensorError>;
     fn unsqueeze(&self) -> TensorView<'_, T, B> {
         unsafe{self.unsqueeze_at(0).unwrap_unchecked()}
@@ -229,7 +229,7 @@ pub trait TensorAccessMut<T: TensorValue, B: Backend<T>>: TensorAccess<T, B> {
     }
 
     fn permute_mut(&mut self, dims: impl Into<Idx>) -> Result<TensorViewMut<'_, T, B>, TensorError> ;
-    fn transpose_mut(&mut self) -> Result<TensorViewMut<'_, T, B>, TensorError>;
+    fn transpose_mut(&mut self) -> TensorViewMut<'_, T, B>;
     fn unsqueeze_at_mut(&mut self, dim: Dim) -> Result<TensorViewMut<'_, T, B>, TensorError>;
     fn unsqueeze_mut(&mut self) -> Result<TensorViewMut<'_, T, B>, TensorError> {
         self.unsqueeze_at_mut(0)
@@ -288,10 +288,10 @@ where B: Backend<T>, V: AsView<T, B>
     }
     
     /// permute all dims
-    fn transpose(&self) -> Result<TensorView<'_, T, B>, TensorError> {
+    fn transpose(&self) -> TensorView<'_, T, B> {
         let rank = self.view().meta.rank();
         let dims: Idx = Idx::Coord((0..rank).rev().collect());
-        self.permute(dims)
+        unsafe { self.permute(dims).unwrap_unchecked() }
     }
 
     fn unsqueeze_at(&self, dim: Dim) -> Result<TensorView<'_, T, B>, TensorError> {
@@ -366,10 +366,10 @@ where V: AsViewMut<T, B>
         Ok(view)
     }
 
-    fn transpose_mut(&mut self) -> Result<TensorViewMut<'_, T, B>, TensorError> {
+    fn transpose_mut(&mut self) -> TensorViewMut<'_, T, B> {
         let rank = self.view().meta.rank();
         let dims: Idx = Idx::Coord((0..rank).rev().collect());
-        self.permute_mut(dims)
+        unsafe { self.permute_mut(dims).unwrap_unchecked() }
     }
 
     fn unsqueeze_at_mut(&mut self, dim: Dim) -> Result<TensorViewMut<'_, T, B>, TensorError> {

@@ -201,12 +201,21 @@ macro_rules! blas_impl {
                 n: usize,
                 contiguity: ContiguityTypes
             ) -> Result<Self::Buf, TensorError> {
+
                 let mut out_buf: Box<[$t]> = self.alloc(b * m * n)?;
                 let (lhs_buf, lhs_meta): (&Self::Buf, &MetaTensor) = lhs;
                 let (rhs_buf, rhs_meta): (&Self::Buf, &MetaTensor) = rhs;
+                let lda = match &contiguity {
+                    ContiguityTypes::ColumnMajor => lhs_meta.strides()[lhs_meta.rank() - 1] as blasint,
+                    ContiguityTypes::RowMajor => lhs_meta.strides()[lhs_meta.rank() - 2] as blasint,
+                    _ => panic!("Invalid contiguity for BLAS matmul")
+                };
 
-                let lda = lhs_meta.strides()[lhs_meta.rank() - 2] as blasint;
-                let ldb = rhs_meta.strides()[rhs_meta.rank() - 2] as blasint;
+                let ldb = match &contiguity {
+                    ContiguityTypes::ColumnMajor => rhs_meta.strides()[rhs_meta.rank() - 1] as blasint,
+                    ContiguityTypes::RowMajor => rhs_meta.strides()[rhs_meta.rank() - 2] as blasint,
+                    _ => panic!("Invalid contiguity for BLAS matmul")
+                };
                 let ldc = n as blasint; // row major
 
                 let bstride_lhs = if lhs_meta.rank() > 2 {
@@ -220,6 +229,32 @@ macro_rules! blas_impl {
                 } else {
                     k * n
                 };
+                
+                let (order, trans, m, n, lda, ldb, lhs, rhs) = match contiguity {
+                    ContiguityTypes::RowMajor => (
+                        CBLAS_ORDER::CblasRowMajor,
+                        CBLAS_TRANSPOSE::CblasNoTrans,
+                        m,
+                        n,
+                        lda,
+                        ldb,
+                        lhs_buf.as_ptr(),
+                        rhs_buf.as_ptr(),
+                    ),
+                    ContiguityTypes::ColumnMajor => (
+                        CBLAS_ORDER::CblasColMajor,
+                        CBLAS_TRANSPOSE::CblasTrans,
+                        m,
+                        n,
+                        ldb,
+                        lda,
+                        rhs_buf.as_ptr(),
+                        lhs_buf.as_ptr(),
+                    ),
+                    _ => {
+                        panic!("Invalid contiguity for BLAS matmul")
+                    }
+                };
 
                 for batch in 0..b {
                     // base pointers
@@ -230,16 +265,16 @@ macro_rules! blas_impl {
 
                     unsafe {
                         $gemm_fn(
-                            if contiguity == ContiguityTypes::ColumnMajor { CBLAS_ORDER::CblasColMajor } else { CBLAS_ORDER::CblasRowMajor },
-                            CBLAS_TRANSPOSE::CblasNoTrans,
-                            CBLAS_TRANSPOSE::CblasNoTrans,
+                            order,
+                            trans,
+                            trans,
                             m as blasint,
                             n as blasint,
                             k as blasint,
                             1.0,
-                            lhs_buf.as_ptr().add(lhs_batch) as *const $t,
+                            lhs.add(lhs_batch) as *const $t,
                             lda,
-                            rhs_buf.as_ptr().add(rhs_batch) as *const $t,
+                            rhs.add(rhs_batch) as *const $t,
                             ldb,
                             0.0,
                             out_buf.as_mut_ptr().add(out_batch) as *mut $t,
@@ -254,7 +289,7 @@ macro_rules! blas_impl {
     };
 }
 
-macro_rules! generic_backend_blas {
+macro_rules! generic_backend_matmul {
     ($t:ty) => {
         impl BackendMatMul<$t> for Cpu {
             fn matmul(
@@ -270,35 +305,58 @@ macro_rules! generic_backend_blas {
                 let mut out_buf = self.alloc(b * m * n)?;
                 let (lhs_buf, lhs_meta): (&Self::Buf, &MetaTensor) = lhs;
                 let (rhs_buf, rhs_meta): (&Self::Buf, &MetaTensor) = rhs;
-                let lda = lhs_meta.strides[lhs_meta.rank() - 2] as usize;
-                let ldb = rhs_meta.strides[rhs_meta.rank() - 2] as usize;
+                let lda = match contiguity {
+                    ContiguityTypes::ColumnMajor => lhs_meta.strides[lhs_meta.rank() - 1] as usize,
+                    ContiguityTypes::RowMajor => lhs_meta.strides[lhs_meta.rank() - 2] as usize,
+                    _ => panic!("Invalid contiguity for generic matmul")
+                };
+                let ldb = match contiguity {
+                    ContiguityTypes::ColumnMajor => rhs_meta.strides[rhs_meta.rank() - 1] as usize,
+                    ContiguityTypes::RowMajor => rhs_meta.strides[rhs_meta.rank() - 2] as usize,
+                    _ => panic!("Invalid contiguity for generic matmul")
+                };
 
                 let bstride_lhs = if lhs_meta.rank() > 2 {
                     lhs_meta.strides[lhs_meta.rank() - 3] as usize
                 } else {
-                    m * k
+                    0 // only 1 batch, we won't stride
                 };
 
                 let bstride_rhs = if rhs_meta.rank() > 2 {
                     rhs_meta.strides[rhs_meta.rank() - 3] as usize
                 } else {
-                    k * n
+                    0 // only 1 batch, we won't stride
                 };
 
                 for batch in 0..b {
                     let lhs_batch = lhs_meta.offset + batch * bstride_lhs;
                     let rhs_batch = rhs_meta.offset + batch * bstride_rhs;
                     let out_batch = batch * m * n;
-
-                    for row in 0..m {
-                        for col in 0..n {
-                            let mut sum: $t = 0;
-                            for inner in 0..k {
-                                let lhs_idx = lhs_batch + row * lda + inner;
-                                let rhs_idx = rhs_batch + inner * ldb + col;
-                                sum += lhs_buf[lhs_idx] * rhs_buf[rhs_idx];
+                    // this is repeated code, yes, but we want to reduce indirection in the inner loop
+                    // as this is a hot path. furthermore, branching in the inner loop will reduce chances of vectorization
+                    if contiguity == ContiguityTypes::RowMajor {
+                        for row in 0..m {
+                            for col in 0..n {
+                                let mut sum: $t = 0;
+                                for inner in 0..k {
+                                    let lhs_idx = lhs_batch + row * lda + inner;
+                                    let rhs_idx = rhs_batch + inner * ldb + col;
+                                    sum += lhs_buf[lhs_idx] * rhs_buf[rhs_idx];
+                                }
+                                out_buf[out_batch + row * n + col] = sum;
                             }
-                            out_buf[out_batch + row * n + col] = sum;
+                        }
+                    }else {
+                        for row in 0..m {
+                            for col in 0..n {
+                                let mut sum: $t = 0;
+                                for inner in 0..k {
+                                    let lhs_idx = lhs_batch + row + inner * lda;
+                                    let rhs_idx = rhs_batch + inner + col * ldb;
+                                    sum += lhs_buf[lhs_idx] * rhs_buf[rhs_idx];
+                                }
+                                out_buf[out_batch + row * n + col] = sum;
+                            }
                         }
                     }
                 }
@@ -312,18 +370,18 @@ macro_rules! generic_backend_blas {
 // instead of specialization
 blas_impl!(f32, cblas_sgemm);
 blas_impl!(f64, cblas_dgemm);
-generic_backend_blas!(i8);
-generic_backend_blas!(i16);
-generic_backend_blas!(i32);
-generic_backend_blas!(i64);
-generic_backend_blas!(i128);
-generic_backend_blas!(isize);
-generic_backend_blas!(u8);
-generic_backend_blas!(u16);
-generic_backend_blas!(u32);
-generic_backend_blas!(u64);
-generic_backend_blas!(u128);
-generic_backend_blas!(usize);
+generic_backend_matmul!(i8);
+generic_backend_matmul!(i16);
+generic_backend_matmul!(i32);
+generic_backend_matmul!(i64);
+generic_backend_matmul!(i128);
+generic_backend_matmul!(isize);
+generic_backend_matmul!(u8);
+generic_backend_matmul!(u16);
+generic_backend_matmul!(u32);
+generic_backend_matmul!(u64);
+generic_backend_matmul!(u128);
+generic_backend_matmul!(usize);
 
 #[cfg(test)]
 mod tests {

@@ -51,7 +51,6 @@ where
                 unsafe{_lhs_storage.as_ref().unwrap_unchecked().view()}
             },
             (ContiguityTypes::RowMajor, _) | (ContiguityTypes::ColumnMajor, ContiguityTypes::ColumnMajor) => {
-                debug_assert!(target_contiguity == ContiguityTypes::RowMajor);
                 lhs_view0
                 // let c = lhs_view0.contiguous();
                 // _lhs_storage = Some(c);
@@ -173,9 +172,19 @@ fn contiguity_type(
         return Err(());
     }
 
-    if strides[shape.len() - 1] != 1isize {
-        return Ok(ContiguityTypes::None);
+    // if strides[shape.len() - 1] != 1isize {
+    //     return Ok(ContiguityTypes::None);
+    // }
+
+    // 2 cases: row major or column major
+    // row major means -1 dim is contiguous
+    if strides[shape.len() - 1] == 1isize {
+        return Ok(ContiguityTypes::RowMajor);
+    }
+    // column major means -2 dim is contiguous
+    if strides[shape.len() - 2] == 1isize {
+        return Ok(ContiguityTypes::ColumnMajor);
     }
 
-    Ok(ContiguityTypes::RowMajor)
+    Ok(ContiguityTypes::None)
 }
