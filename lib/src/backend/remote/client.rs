@@ -1,6 +1,6 @@
 use std::{net::IpAddr, sync::{atomic::AtomicBool, Arc}};
 
-use crate::{backend::Backend, core::value::TensorValue};
+use crate::{backend::{remote::TensorId, Backend}, core::value::TensorValue};
 
 
 struct RemoteCtx {
@@ -9,7 +9,7 @@ struct RemoteCtx {
 }
 
 pub struct RemoteBuf {
-    pub id: u64,
+    pub id: TensorId,
     dirty: Arc<AtomicBool>,
 }
 
