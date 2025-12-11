@@ -1975,7 +1975,7 @@ mod tests {
         let tensor = make_tensor(buf, shape);
         
         let view = tensor.view();
-        let transposed = view.transpose().unwrap();
+        let transposed = view.transpose();
         assert_eq!(*transposed.shape(), vec![3, 2]); // 3 rows, 2 columns
         assert_eq!(*transposed.strides(), vec![1, 3]); // stride is swapped
         
@@ -2001,7 +2001,7 @@ mod tests {
         let shape = vec![2, 2, 2]; // depth, rows, columns
         let tensor = make_tensor(buf, shape);
         
-        let transposed = tensor.transpose().unwrap();
+        let transposed = tensor.transpose();
         assert_eq!(*transposed.shape(), vec![2, 2, 2]); // dimensions reversed
         assert_eq!(*transposed.strides(), vec![1, 2, 4]); // strides reversed
         
@@ -2027,7 +2027,7 @@ mod tests {
         let shape = vec![2, 3];
         let mut tensor = make_tensor(buf, shape);
         
-        let mut transposed = tensor.transpose_mut().unwrap();
+        let mut transposed = tensor.transpose_mut();
         assert_eq!(*transposed.shape(), vec![3, 2]);
         
         // Modify through transposed view
@@ -2049,7 +2049,7 @@ mod tests {
         let shape = vec![2, 2, 2];
         let mut tensor = make_tensor(buf, shape);
         
-        let mut transposed = tensor.transpose_mut().unwrap();
+        let mut transposed = tensor.transpose_mut();
         assert_eq!(*transposed.shape(), vec![2, 2, 2]);
         
         // Modify through transposed view
@@ -2240,7 +2240,7 @@ mod tests {
         assert_eq!(*slice.shape(), vec![2, 3]);
         
         // Transpose the slice
-        let transposed = slice.transpose().unwrap();
+        let transposed = slice.transpose();
         assert_eq!(*transposed.shape(), vec![3, 2]);
         
         assert_eq!(index_tensor(coord![0, 0], &transposed).unwrap(), 4);
@@ -2335,7 +2335,7 @@ mod tests {
         let shape = vec![2, 3];
         let tensor = make_tensor(buf, shape);
         
-        let transposed = tensor.transpose().unwrap();
+        let transposed = tensor.transpose();
         assert_eq!(*transposed.shape(), vec![3, 2]);
         
         // Slice first row of transposed (which is first column of original)
@@ -2358,7 +2358,7 @@ mod tests {
         
         {
             let mut slice_mut = tensor.slice_mut(0, 0..2).unwrap();
-            let mut transposed = slice_mut.transpose_mut().unwrap();
+            let mut transposed = slice_mut.transpose_mut();
             
             // Modify through transposed slice
             transposed.set(coord![0, 0], 100).unwrap(); // Original [0,0]

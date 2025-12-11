@@ -9,6 +9,12 @@ enum OpCode : uint8_t {
     OP_MUL = 2,
 };
 
+// Contiguity types for matrix layouts
+enum ContiguityType : uint8_t {
+    ROW_MAJOR = 0,
+    COLUMN_MAJOR = 1,
+};
+
 #define WARP_SIZE 32
 #define MIN_BLOCK_SIZE 32
 #define MAX_BLOCK_SIZE 1024

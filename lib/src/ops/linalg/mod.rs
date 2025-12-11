@@ -14,7 +14,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{primitives::Tensor, tensor::{AsTensor, TensorAccess}, MetaTensorView, Slice};
+    use crate::core::{primitives::Tensor, tensor::TensorAccess, MetaTensorView, Slice};
 
     #[test]
     fn test_matmul_2d_basic() {
@@ -514,7 +514,7 @@ mod tests {
         // assert_eq!(sliced.get((1, 1)), expectedb.get((1, 1)));
         
         // Transpose it -> [2, 2]
-        let transposed = sliced.transpose().unwrap();
+        let transposed = sliced.transpose();
 
         // let expectedc = Tensor::<f64>::from_buf(
         //     vec![
@@ -1434,12 +1434,217 @@ mod tests {
         assert!((result.item().unwrap() - expected).abs() < 1e-6);
     }
 
+    #[test]
+    fn test_both_column_major() {
+        let a = Tensor::<f32>::from_buf(
+            vec![
+                1.0, 3.0,
+                2.0, 4.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let b = Tensor::<f32>::from_buf(
+            vec![
+                5.0, 7.0,
+                6.0, 8.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let result = a.transpose().matmul(&b.transpose()).unwrap();
+
+        let expected = Tensor::<f32>::from_buf(
+            vec![
+                19.0, 22.0,
+                43.0,  50.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result, expected);
+    }
+
+
+    #[test]
+    fn test_both_column_major_column_stride() {
+        let a = Tensor::<f32>::from_buf(
+            vec![
+                1.0, 3.0,
+                8.0, 8.0,
+                2.0, 4.0, 
+                8.0, 8.0,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let b = Tensor::<f32>::from_buf(
+            vec![
+                5.0,  7.0,
+                122.0, 122.0,
+                6.0, 8.0,
+                678.0, 678.0,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let result = a
+            .slice(0, Slice::from(0..=2).step(2))
+            .unwrap()
+            .transpose()
+            .matmul(
+                &b
+                .slice(0, Slice::from(0..=2).step(2))
+                .unwrap()
+                .transpose()
+            ).unwrap();
+
+        let expected = Tensor::<f32>::from_buf(
+            vec![
+                19.0, 22.0,
+                43.0,  50.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result, expected);
+    }
+
+
+
+    #[test]
+    fn test_both_column_major_i32() {
+        let a = Tensor::<i32>::from_buf(
+            vec![
+                1, 3,
+                2, 4,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let b = Tensor::<i32>::from_buf(
+            vec![
+                5, 7,
+                6, 8,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let result = a.transpose().matmul(&b.transpose()).unwrap();
+
+        let expected = Tensor::<i32>::from_buf(
+            vec![
+                19, 22,
+                43,  50,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result, expected);
+    }
+
+
+    #[test]
+    fn test_both_column_major_column_stride_i32() {
+        let a = Tensor::<i32>::from_buf(
+            vec![
+                1, 3,
+                8, 8,
+                2, 4, 
+                8, 8,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let b = Tensor::<i32>::from_buf(
+            vec![
+                5,  7,
+                122, 122,
+                6, 8,
+                678, 678,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let result = a
+            .slice(0, Slice::from(0..=2).step(2))
+            .unwrap()
+            .transpose()
+            .matmul(
+                &b
+                .slice(0, Slice::from(0..=2).step(2))
+                .unwrap()
+                .transpose()
+            ).unwrap();
+
+        let expected = Tensor::<i32>::from_buf(
+            vec![
+                19, 22,
+                43,  50,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_batched_i32_strided_rows() {
+        let a = Tensor::<i32>::from_buf(
+            vec![
+                1, 2, 3, 4,
+                5, 6, 7, 8,
+                9, 10, 11, 12,
+                13, 14, 15, 16,
+
+                21, 22, 23, 24,
+                25, 26, 27, 28,
+                29, 210, 211, 212,
+                213, 214, 215, 216,
+            ],
+            vec![2, 4, 4]
+        ).unwrap();
+
+        let b = Tensor::<i32>::from_buf(
+            vec![
+                1, 2,
+                3, 4,
+                5, 6,
+                7, 8,
+
+                11, 12,
+                13, 14,
+                15, 16,
+                17, 18,
+            ],
+            vec![2, 4, 2]
+        ).unwrap();
+
+        let aslice = a.slice(1, Slice::full().step(2)).unwrap();
+        
+        let result = aslice.matmul(&b).unwrap();
+        
+        assert_eq!(*result.shape(), vec![2, 2, 2]);
+        let expected = Tensor::<i32>::from_buf(
+            vec![
+                50, 60,
+                178, 220,
+
+                1270, 1360,
+                9818, 10480
+            ],
+            vec![2, 2, 2]
+        ).unwrap();
+        
+        assert_eq!(result, expected);
+    }
+
 }
 
 #[cfg(all(test, feature = "cuda"))]
 mod cuda_tests {
     use super::*;
-    use crate::core::{primitives::{CudaTensor, Tensor}, MetaTensorView, tensor::TensorAccess, Slice};
+    use crate::core::{primitives::{CudaTensor, Tensor}, tensor::TensorAccess, MetaTensorView, Slice};
 
     // ============================================================================
     // F32 GEMM TESTS
@@ -1867,7 +2072,7 @@ mod cuda_tests {
         let sliced = sliced_step1.slice(1, 1..3).unwrap();
         
         // Transpose it -> [2, 2]
-        let transposed = sliced.transpose().unwrap();
+        let transposed = sliced.transpose();
         
         let b = CudaTensor::<f64>::from_buf(
             vec![1.0, 0.0, 0.0, 1.0],
@@ -2792,6 +2997,159 @@ mod cuda_tests {
         let result_cpu = result.cpu().unwrap();
         assert!(result_cpu.item().unwrap().abs() < 1e-6);
     }
+
+    #[test]
+    fn test_both_column_major() {
+        let a = CudaTensor::<f32>::from_buf(
+            vec![
+                1.0, 3.0,
+                2.0, 4.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let b = CudaTensor::<f32>::from_buf(
+            vec![
+                5.0, 7.0,
+                6.0, 8.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let result = a.transpose().matmul(&b.transpose()).unwrap();
+
+        let expected = CudaTensor::<f32>::from_buf(
+            vec![
+                19.0, 22.0,
+                43.0,  50.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result.cpu().unwrap(), expected.cpu().unwrap());
+    }
+
+
+    #[test]
+    fn test_both_column_major_column_stride() {
+        let a = CudaTensor::<f32>::from_buf(
+            vec![
+                1.0, 3.0,
+                8.0, 8.0,
+                2.0, 4.0, 
+                8.0, 8.0,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let b = CudaTensor::<f32>::from_buf(
+            vec![
+                5.0,  7.0,
+                122.0, 122.0,
+                6.0, 8.0,
+                678.0, 678.0,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let result = a
+            .slice(0, Slice::from(0..=2).step(2))
+            .unwrap()
+            .transpose()
+            .matmul(
+                &b
+                .slice(0, Slice::from(0..=2).step(2))
+                .unwrap()
+                .transpose()
+            ).unwrap();
+
+        let expected = CudaTensor::<f32>::from_buf(
+            vec![
+                19.0, 22.0,
+                43.0,  50.0,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result.cpu().unwrap(), expected.cpu().unwrap());
+    }
+
+    #[test]
+    fn test_both_column_major_i32() {
+        let a = CudaTensor::<i32>::from_buf(
+            vec![
+                1, 3,
+                2, 4,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let b = CudaTensor::<i32>::from_buf(
+            vec![
+                5, 7,
+                6, 8,
+            ],
+            vec![2, 2]
+        ).unwrap();
+
+        let result = a.transpose().matmul(&b.transpose()).unwrap();
+
+        let expected = Tensor::<i32>::from_buf(
+            vec![
+                19, 22,
+                43,  50,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result.cpu().unwrap(), expected);
+    }
+
+
+    #[test]
+    fn test_both_column_major_column_stride_i32() {
+        let a = CudaTensor::<i32>::from_buf(
+            vec![
+                1, 3,
+                8, 8,
+                2, 4, 
+                8, 8,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let b = CudaTensor::<i32>::from_buf(
+            vec![
+                5,  7,
+                122, 122,
+                6, 8,
+                678, 678,
+            ],
+            vec![4, 2]
+        ).unwrap();
+
+        let result = a
+            .slice(0, Slice::from(0..=2).step(2))
+            .unwrap()
+            .transpose()
+            .matmul(
+                &b
+                .slice(0, Slice::from(0..=2).step(2))
+                .unwrap()
+                .transpose()
+            ).unwrap();
+
+        let expected = Tensor::<i32>::from_buf(
+            vec![
+                19, 22,
+                43,  50,
+            ],
+            vec![2, 2]
+        ).unwrap();
+        
+        assert_eq!(result.cpu().unwrap(), expected);
+    }
+
 
 }
 
