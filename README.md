@@ -5,8 +5,6 @@ Uses BLAS, cuBLAS, and custom kernels.
 
 Goal is high performance ML stack with minimal dependencies, and the flexibility of numpy.
 
-Interface in examples may have changed (assume it can only be better)
-
 ## Creating Tensors
 
 ```rust
