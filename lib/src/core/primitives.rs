@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::net::IpAddr;
 
 use crate::backend::Backend;
 use crate::backend::cpu::Cpu;
@@ -286,11 +287,15 @@ where
 }
 
 /// Indicates where a tensor's data resides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceType {
-    /// CPU memory
     Cpu,
     #[cfg(feature = "cuda")]
-    /// CUDA device memory (GPU), with device index
     Cuda(usize),
+    #[cfg(feature = "remote")]
+    Remote {
+        ip: IpAddr,
+        port: u16,
+        remote_type: Box<DeviceType>
+    }
 }

@@ -1,72 +1,154 @@
 use std::{net::{IpAddr, TcpStream}, sync::{atomic::AtomicBool, Arc}};
 
-use crate::{backend::{remote::TensorId, Backend}, core::value::TensorValue};
+use crate::{backend::{remote::{protocol, TensorId}, Backend, BackendMatMul}, core::{meta::ContiguityTypes, primitives::DeviceType, tensor::TensorError, value::TensorValue, MetaTensor}};
 
-
-struct RemoteCtx {
-    pub address: IpAddr,
-    pub port: u16
-}
-
-pub struct RemoteBuf {
+pub struct RemoteBuf<T: TensorValue> {
     pub id: TensorId,
     dirty: Arc<AtomicBool>,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: TensorValue> From<&RemoteBuf<T>> for Option<protocol::RemoteBuf> {
+    fn from(buf: &RemoteBuf<T>) -> Self {
+        Some(protocol::RemoteBuf {
+            tensor_id: buf.id,
+            dtype: Into::<protocol::DType>::into(T::DTYPE) as i32,
+        })
+    }
+}
+
+impl<T: TensorValue> From<&mut RemoteBuf<T>> for Option<protocol::RemoteBuf> {
+    fn from(buf: &mut RemoteBuf<T>) -> Self {
+        Some(protocol::RemoteBuf {
+            tensor_id: buf.id,
+            dtype: Into::<protocol::DType>::into(T::DTYPE) as i32,
+        })
+    }
 }
 
 pub struct RemoteBackend {
-    ctx: RemoteCtx,
+    pub address: IpAddr,
+    pub port: u16,
     stream: Option<TcpStream>
 }
 
 impl RemoteBackend {
     pub fn new(address: IpAddr, port: u16) -> Self {
         Self {
-            ctx: RemoteCtx { address, port },
+            address,
+            port,
             stream: None,
         }
     }
 
-    pub fn connect(&self) -> Result<(), std::io::Error> {
-        todo!()
+    pub fn connect(&mut self) -> Result<(), std::io::Error> {
+        let stream = TcpStream::connect((self.address, self.port))?;
+        self.stream = Some(stream);
+        Ok(())
     }
 }
 
 impl Backend for RemoteBackend {
-    type Buf<T: TensorValue> = RemoteBuf;
+    type Buf<T: TensorValue> = RemoteBuf<T>;
 
     fn device_type() -> crate::core::primitives::DeviceType {
-        todo!()
+        let _message = protocol::DeviceTypeRequest {};
+        DeviceType::Remote {
+            ip: IpAddr::V4(0.into()),
+            port: 0,
+            remote_type: Box::new(DeviceType::Cpu),
+        }
     }
 
     fn alloc_from_slice<T: TensorValue>(&self, src: Box<[T]>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        let vect: Vec<T> = src.into();
+        // turn into bytes 
+        let vecbytes = unsafe {
+            std::slice::from_raw_parts(
+                vect.as_ptr() as *const u8,
+                vect.len() * std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let _request = protocol::AllocFromSliceRequest {
+            dtype: Into::<protocol::DType>::into(T::DTYPE) as i32,
+            data: vecbytes,
+        };
+
         todo!()
     }
 
     fn alloc<T: TensorValue>(&self, len: usize) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        let pdtyppe: protocol::DType = T::DTYPE.into();
+        let _request = protocol::AllocRequest {
+            dtype: pdtyppe as i32,
+            len: len as u64,
+        };
+
         todo!()
     }
 
     fn copy_from_slice<T: TensorValue>(&self, dst: &mut Self::Buf<T>, src: &[T]) -> Result<(), crate::core::tensor::TensorError> {
+        let vecbytes = unsafe {
+            std::slice::from_raw_parts(
+                src.as_ptr() as *const u8,
+                src.len() * std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let _request = protocol::CopyFromSliceRequest {
+            buf: dst.into(),
+            data: vecbytes,
+        };
+
         todo!()
     }
 
     fn read<T: TensorValue>(&self, buf: &Self::Buf<T>, offset: usize) -> Result<T, crate::core::tensor::TensorError> {
+        let _request = protocol::ReadRequest {
+            buf: buf.into(),
+            offset: offset as u64,
+        };
+
         todo!()
     }
 
     fn write<T: TensorValue>(&self, buf: &mut Self::Buf<T>, offset: usize, value: T) -> Result<(), crate::core::tensor::TensorError> {
+        let valuebytes = unsafe {
+            std::slice::from_raw_parts(
+                &value as *const T as *const u8,
+                std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let dtype: protocol::DType = T::DTYPE.into();
+        let _request = protocol::WriteRequest {
+            buf: buf.into(),
+            offset: offset as u64,
+            value: Some(protocol::TensorValue::from_bytes_and_dtype(valuebytes, dtype)),
+        };
+
         todo!()
     }
 
     fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize {
+        let _request = protocol::LenRequest {
+            buf: buf.into(),
+        };
+
         todo!()
     }
 
     fn copy<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        let _request = protocol::CopyRequest {
+            src: src.into(),
+        };
+
         todo!()
     }
 
     fn dump<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Box<[T]>, crate::core::tensor::TensorError> {
+        let _request = protocol::DumpRequest {
+            buf: src.into(),
+        };
+
         todo!()
     }
 
@@ -80,6 +162,24 @@ impl Backend for RemoteBackend {
         start: usize,
         len: usize
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let valuebytes = unsafe {
+            std::slice::from_raw_parts(
+                &op.1 as *const T as *const u8,
+                std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let dtype: protocol::DType = T::DTYPE.into();
+        let _request = protocol::ApplyElementwiseContiguousRequest {
+            buf: buf.into(),
+            op: Some(protocol::ElementwiseOp {
+                op_type: Into::<protocol::OpType>::into(op.0) as i32,
+                value: Some(protocol::TensorValue::from_bytes_and_dtype(valuebytes, dtype)),
+            }),
+            start: start as u64,
+            len: len as u64,
+        };
+
+        // TODO: Send request and parse response
         todo!()
     }
 
@@ -90,6 +190,25 @@ impl Backend for RemoteBackend {
         stride: isize,
         len: usize
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let valuebytes = unsafe {
+            std::slice::from_raw_parts(
+                &op.1 as *const T as *const u8,
+                std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let dtype: protocol::DType = T::DTYPE.into();
+        let _request = protocol::ApplyElementwise1dStridedRequest {
+            buf: buf.into(),
+            op: Some(protocol::ElementwiseOp {
+                op_type: Into::<protocol::OpType>::into(op.0) as i32,
+                value: Some(protocol::TensorValue::from_bytes_and_dtype(valuebytes, dtype)),
+            }),
+            offset: offset as u64,
+            stride: stride as i64,
+            len: len as u64,
+        };
+
+        // TODO: Send request and parse response
         todo!()
     }
 
@@ -101,6 +220,25 @@ impl Backend for RemoteBackend {
         shape: &[usize],
         stride: &[isize],
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let valuebytes = unsafe {
+            std::slice::from_raw_parts(
+                &op.1 as *const T as *const u8,
+                std::mem::size_of::<T>(),
+            ).to_vec()
+        };
+        let dtype: protocol::DType = T::DTYPE.into();
+        let _request = protocol::ApplyElementwiseNdRequest {
+            buf: buf.into(),
+            op: Some(protocol::ElementwiseOp {
+                op_type: Into::<protocol::OpType>::into(op.0) as i32,
+                value: Some(protocol::TensorValue::from_bytes_and_dtype(valuebytes, dtype)),
+            }),
+            offset: offset as u64,
+            shape: shape.iter().map(|&s| s as u64).collect(),
+            stride: stride.iter().map(|&s| s as i64).collect(),
+        };
+
+        // TODO: Send request and parse response
         todo!()
     }
 
@@ -111,6 +249,76 @@ impl Backend for RemoteBackend {
         dst: (*mut Self::Buf<T>, &crate::core::MetaTensor),
         op: crate::ops::base::OpType
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let _request = protocol::BroadcastRequest {
+            left: Some(protocol::RemoteBufWithMeta {
+                buf: (&*left.0).into(),
+                meta: Some(protocol::MetaTensor {
+                    offset: left.1.offset as u64,
+                    shape: left.1.shape.iter().map(|&s| s as u64).collect(),
+                    strides: left.1.strides.iter().map(|&s| s as i64).collect(),
+                }),
+            }),
+            right: Some(protocol::RemoteBufWithMeta {
+                buf: (&*right.0).into(),
+                meta: Some(protocol::MetaTensor {
+                    offset: right.1.offset as u64,
+                    shape: right.1.shape.iter().map(|&s| s as u64).collect(),
+                    strides: right.1.strides.iter().map(|&s| s as i64).collect(),
+                }),
+            }),
+            dst: Some(protocol::RemoteBufWithMeta {
+                buf: (&*dst.0).into(),
+                meta: Some(protocol::MetaTensor {
+                    offset: dst.1.offset as u64,
+                    shape: dst.1.shape.iter().map(|&s| s as u64).collect(),
+                    strides: dst.1.strides.iter().map(|&s| s as i64).collect(),
+                }),
+            }),
+            op: Into::<protocol::OpType>::into(op) as i32,
+        };
+
+        // TODO: Send request and parse response
+        todo!()
+    }
+}
+
+
+impl<T: TensorValue> BackendMatMul<T> for RemoteBackend {
+    fn matmul(
+        &self,
+        lhs: (&Self::Buf<T>, &MetaTensor),
+        rhs: (&Self::Buf<T>, &MetaTensor),
+        b: usize,
+        m: usize,
+        k: usize,
+        n: usize,
+        contiguity: ContiguityTypes,
+    ) -> Result<Self::Buf<T>, TensorError> {
+        let _request = protocol::MatMulRequest {
+            lhs: Some(protocol::RemoteBufWithMeta {
+                buf: lhs.0.into(),
+                meta: Some(protocol::MetaTensor {
+                    offset: lhs.1.offset as u64,
+                    shape: lhs.1.shape.iter().map(|&s| s as u64).collect(),
+                    strides: lhs.1.strides.iter().map(|&s| s as i64).collect(),
+                }),
+            }),
+            rhs: Some(protocol::RemoteBufWithMeta {
+                buf: rhs.0.into(),
+                meta: Some(protocol::MetaTensor {
+                    offset: rhs.1.offset as u64,
+                    shape: rhs.1.shape.iter().map(|&s| s as u64).collect(),
+                    strides: rhs.1.strides.iter().map(|&s| s as i64).collect(),
+                }),
+            }),
+            b: b as u64,
+            m: m as u64,
+            k: k as u64,
+            n: n as u64,
+            contiguity: Into::<protocol::ContiguityType>::into(contiguity) as i32,
+        };
+
+        // TODO: Send request and parse response to get new RemoteBuf
         todo!()
     }
 }
