@@ -1,5 +1,7 @@
 
-use crate::{backend::{remote::TensorId, Backend}, core::{erased::UntypedTensor, tensor::{AsView, AsViewMut, TensorError}, value::TensorValue, Shape, TensorView, TensorViewMut}};
+use std::{collections::HashMap, net::IpAddr};
+
+use crate::{backend::{remote::{client::RemoteBackend, TensorId}, Backend}, core::{tensor::{AsView, AsViewMut, TensorError}, untyped::UntypedTensor, value::TensorValue, Shape, TensorView, TensorViewMut}};
 
 
 struct RemoteTensor<B: Backend> {
@@ -22,5 +24,20 @@ impl<T: TensorValue, B: Backend> AsViewMut<T, B> for RemoteTensor<B> {
     }
     fn view_as_mut(&'_ mut self, shape: Shape) -> Result<TensorViewMut<'_, T, B>, TensorError> { 
         self.tensor.typed_mut::<T>().expect("Failed to downcast tensor").view_as_mut(shape) 
+    }
+}
+
+struct BackendServer {
+    address: IpAddr,
+    port: u16,
+}
+
+impl BackendServer {
+    pub fn new(address: IpAddr, port: u16) -> Self {
+        Self { address, port }
+    }
+
+    pub async fn serve(&self) -> Result<(), std::io::Error> {
+        todo!()
     }
 }

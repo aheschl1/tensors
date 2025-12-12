@@ -17,7 +17,7 @@ pub trait TensorValue:
     std::ops::Mul<Output = Self> +
     'static
 {
-    const DTYPE: crate::core::value::Dtypes;
+    const DTYPE: crate::core::value::DType;
 }
 
 #[cfg(not(feature = "cuda"))]
@@ -34,7 +34,7 @@ pub trait TensorValue:
     std::ops::Mul<Output = Self> +
     'static
 {
-    const DTYPE: crate::core::value::Dtypes;
+    const DTYPE: crate::core::value::DType;
 }
 
 /// Provides default constant values for tensor element types.
@@ -57,7 +57,7 @@ macro_rules! impl_tensor_values {
     ($(($type:ty, $dtype:expr)),+ $(,)?) => {
         $(
             impl TensorValue for $type {
-                const DTYPE: crate::core::value::Dtypes = $dtype;
+                const DTYPE: crate::core::value::DType = $dtype;
             }
         )+
     };
@@ -74,7 +74,7 @@ macro_rules! impl_default {
     };
 }
 
-impl_tensor_values!((f32, Dtypes::F32), (f64, Dtypes::F64), (i8, Dtypes::I8), (i16, Dtypes::I16), (i32, Dtypes::I32), (i64, Dtypes::I64), (i128, Dtypes::I128), (isize, Dtypes::I64), (u8, Dtypes::U8), (u16, Dtypes::U16), (u32, Dtypes::U32), (u64, Dtypes::U64), (u128, Dtypes::U128), (usize, Dtypes::U64));
+impl_tensor_values!((f32, DType::F32), (f64, DType::F64), (i8, DType::I8), (i16, DType::I16), (i32, DType::I32), (i64, DType::I64), (i128, DType::I128), (isize, DType::I64), (u8, DType::U8), (u16, DType::U16), (u32, DType::U32), (u64, DType::U64), (u128, DType::U128), (usize, DType::U64));
 
 impl_default!(f32, 0.0f32, 1.0f32, f32::MIN, f32::MAX);
 impl_default!(f64, 0.0f64, 1.0f64, f64::MIN, f64::MAX);
@@ -93,7 +93,7 @@ impl_default!(usize, 0usize, 1usize, usize::MIN, usize::MAX);
 impl_default!(bool, false, true, false, true);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Dtypes {
+pub enum DType {
     U8,
     I8,
     U16,
@@ -104,7 +104,6 @@ pub enum Dtypes {
     U64,
     I64,
     I128,
-    F16,
     F32,
     F64,
 }

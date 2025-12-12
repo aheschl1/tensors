@@ -1,4 +1,4 @@
-use crate::core::value::Dtypes;
+use crate::core::value::DType;
 
 pub mod server;
 pub mod client;
