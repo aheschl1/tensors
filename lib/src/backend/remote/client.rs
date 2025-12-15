@@ -1,4 +1,5 @@
 use std::{collections::HashMap, fmt::Debug, io::{Read, Write}, net::IpAddr, sync::{atomic::{AtomicBool, AtomicU32, Ordering}, Arc, Condvar, Mutex, RwLock}};
+use std::{collections::HashMap, fmt::Debug, io::{Read, Write}, net::IpAddr, sync::{atomic::{AtomicBool, AtomicU32, Ordering}, Arc, Condvar, Mutex, RwLock}};
 
 use crate::{backend::{remote::{get_backend_default, protocol::{Messages, Request, Response, Slice, TypelessBuf, Value}}, Backend, BackendMatMul}, core::{primitives::DeviceType, tensor::TensorError, value::{DType, TensorValue}}};
 use flume;
@@ -30,22 +31,30 @@ impl<T: TensorValue> RemoteBuf<T> {
     }
 }
 
-macro_rules! send_recv {
-    ($self:expr, $message:expr, $response_pattern:pat => $result:expr) => {{
-        let receiver = $self.send_message($message);
-        let response = receiver.recv()
-            .map_err(|_| TensorError::BackendError("Failed to receive response".to_string()))?;
-        match response {
-            $response_pattern => $result,
-            _ => Err(TensorError::BackendError("Unexpected response type".to_string())),
-        }
-    }};
+
+#[derive(Debug)]
+struct PendingHandler {
+    count: Arc<AtomicU32>,
+    cv: Condvar,
+    mutex: Mutex<()>,
 }
 
-macro_rules! make_op {
-    ($op:expr, $value:expr) => {
-        ($op, Value::from_value($value))
-    };
+impl PendingHandler {
+    fn inc(&self) {
+        self.count.fetch_add(1, Ordering::SeqCst);
+    }
+    fn dec(&self) {
+        let prev = self.count.fetch_sub(1, Ordering::SeqCst);
+        if prev == 1 {
+            self.cv.notify_all();
+        }
+    }
+    fn sync(&self) {
+        while self.count.load(Ordering::SeqCst) > 0 {
+            let lock = self.mutex.lock().unwrap();
+            let _unused = self.cv.wait(lock).unwrap();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -53,7 +62,7 @@ pub struct RemoteBackend {
     remote_addr: IpAddr,
     remote_port: u16,
     message_id: Arc<AtomicU32>,
-    pending: Arc<Pending>,
+    pending: Arc<PendingHandler>,
     messages_outgoing_sender: flume::Sender<Request>,
     messages_outgoing_receiver: flume::Receiver<Request>,
     pending_response: Arc<RwLock<HashMap<u32, flume::Sender<Messages>>>>,
@@ -72,37 +81,12 @@ impl Debug for RemoteBackend {
     }
 }
 
-#[derive(Debug)]
-struct Pending {
-    count: Mutex<u32>,
-    cv: Condvar,
-}
-
-impl Pending {
-    fn inc(&self) {
-        *self.count.lock().unwrap() += 1;
-    }
-    fn dec(&self) {
-        let mut c = self.count.lock().unwrap();
-        *c -= 1;
-        if *c == 0 {
-            self.cv.notify_all();
-        }
-    }
-    fn sync(&self) {
-        let mut c = self.count.lock().unwrap();
-        while *c > 0 {
-            c = self.cv.wait(c).unwrap();
-        }
-    }
-}
-
-
 impl RemoteBackend {
     pub fn new_with_address(remote_addr: IpAddr, remote_port: u16) -> Result<Self, std::io::Error> {
-        let pending = Pending {
-            count: Mutex::new(0),
+        let pending = PendingHandler {
+            count: Arc::new(AtomicU32::new(0)),
             cv: Condvar::new(),
+            mutex: Mutex::new(()),
         };
         let (sender, receiver) = flume::unbounded();
         let res = Self {
@@ -181,6 +165,24 @@ impl RemoteBackend {
 
 }
 
+macro_rules! send_recv {
+    ($self:expr, $message:expr, $response_pattern:pat => $result:expr) => {{
+        let receiver = $self.send_message($message);
+        let response = receiver.recv()
+            .map_err(|_| TensorError::BackendError("Failed to receive response".to_string()))?;
+        match response {
+            $response_pattern => $result,
+            _ => Err(TensorError::BackendError("Unexpected response type".to_string())),
+        }
+    }};
+}
+
+macro_rules! make_op {
+    ($op:expr, $value:expr) => {
+        ($op, Value::from_value($value))
+    };
+}
+
 impl Backend for RemoteBackend {
     type Buf<T: TensorValue> = RemoteBuf<T>;
 
@@ -197,12 +199,38 @@ impl Backend for RemoteBackend {
         //     _ => panic!("Unexpected response type"),
         // }
         DeviceType::Remote {
-            ip: unreachable!(),
-            port: unreachable!(),
-            remote_type: unreachable!(),
+            ip: "127.0.0.1".parse().unwrap(),
+            port: 7878,
+            remote_type: DeviceType::Cpu.into(),
         }
     }
 
+    fn alloc_from_slice<T: TensorValue>(&self, src: Box<[T]>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        let message = Messages::AllocFromSlice {
+            slice: Slice::from_boxed_slice(src),
+        };
+        send_recv!(self, message, Messages::AllocFromSliceResponse { buf } => {
+            Ok(RemoteBuf::from_typeless(buf?))
+        })
+    }
+
+    fn alloc<T: TensorValue>(&self, len: usize) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        let message = Messages::Alloc {
+            len,
+            dtype: T::DTYPE,
+        };
+        send_recv!(self, message, Messages::AllocResponse { buf } => {
+            Ok(RemoteBuf::from_typeless(buf?))
+        })
+    }
+
+    fn copy_from_slice<T: TensorValue>(&self, dst: &mut Self::Buf<T>, src: &[T]) -> Result<(), crate::core::tensor::TensorError> {
+        self.pending.sync();
+        let message = Messages::CopyFromSlice {
+            dst: dst.to_typeless(),
+            src: Slice::from_slice(src),
+        };
+        send_recv!(self, message, Messages::CopyFromSliceResponse { result } => result)
     fn alloc_from_slice<T: TensorValue>(&self, src: Box<[T]>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
         let message = Messages::AllocFromSlice {
             slice: Slice::from_boxed_slice(src),
@@ -250,8 +278,36 @@ impl Backend for RemoteBackend {
             value: Value::from_value(value),
         };
         send_recv!(self, message, Messages::WriteResponse { result } => result)
+    fn read<T: TensorValue>(&self, buf: &Self::Buf<T>, offset: usize) -> Result<T, crate::core::tensor::TensorError> {
+        self.pending.sync();
+        let message = Messages::Read {
+            buf: buf.to_typeless(),
+            offset,
+        };
+        send_recv!(self, message, Messages::ReadResponse { value } => {
+            value?.to_value::<T>()
+        })
     }
 
+    fn write<T: TensorValue>(&self, buf: &mut Self::Buf<T>, offset: usize, value: T) -> Result<(), crate::core::tensor::TensorError> {
+        self.pending.sync();
+        let message = Messages::Write {
+            buf: buf.to_typeless(),
+            offset,
+            value: Value::from_value(value),
+        };
+        send_recv!(self, message, Messages::WriteResponse { result } => result)
+    }
+
+    fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize {
+        let message = Messages::Len {
+            buf: buf.to_typeless(),
+        };
+        let receiver = self.send_message(message);
+        match receiver.recv() {
+            Ok(Messages::LenResponse { len }) => len,
+            _ => panic!("Failed to get buffer length or unexpected response"),
+        }
     fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize {
         let message = Messages::Len {
             buf: buf.to_typeless(),
@@ -282,7 +338,28 @@ impl Backend for RemoteBackend {
             data?.to_boxed_slice::<T>()
         })
     }
+    fn copy<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
+        self.pending.sync();
+        let message = Messages::Copy {
+            src: src.to_typeless(),
+        };
+        send_recv!(self, message, Messages::CopyResponse { buf } => {
+            Ok(RemoteBuf::from_typeless(buf?))
+        })
+    }
 
+    fn dump<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Box<[T]>, crate::core::tensor::TensorError> {
+        self.pending.sync();
+        let message = Messages::Dump {
+            src: src.to_typeless(),
+        };
+        send_recv!(self, message, Messages::DumpResponse { data } => {
+            data?.to_boxed_slice::<T>()
+        })
+    }
+
+    fn apply_elementwise_contiguous<T: TensorValue>(
+        &self, buf: &mut Self::Buf<T>, 
     fn apply_elementwise_contiguous<T: TensorValue>(
         &self, buf: &mut Self::Buf<T>, 
         op: (crate::ops::base::OpType, T), 
@@ -296,8 +373,17 @@ impl Backend for RemoteBackend {
             len,
         };
         send_recv!(self, message, Messages::ApplyElementwiseContiguousResponse { result } => result)
+        let message = Messages::ApplyElementwiseContiguous {
+            buf: buf.to_typeless(),
+            op: make_op!(op.0, op.1),
+            start,
+            len,
+        };
+        send_recv!(self, message, Messages::ApplyElementwiseContiguousResponse { result } => result)
     }
 
+    fn apply_elementwise_1d_strided<T: TensorValue>(
+        &self, buf: &mut Self::Buf<T>, 
     fn apply_elementwise_1d_strided<T: TensorValue>(
         &self, buf: &mut Self::Buf<T>, 
         op: (crate::ops::base::OpType, T), 
@@ -313,16 +399,34 @@ impl Backend for RemoteBackend {
             len,
         };
         send_recv!(self, message, Messages::ApplyElementwise1DStridedResponse { result } => result)
+        let message = Messages::ApplyElementwise1DStrided {
+            buf: buf.to_typeless(),
+            op: make_op!(op.0, op.1),
+            offset,
+            stride,
+            len,
+        };
+        send_recv!(self, message, Messages::ApplyElementwise1DStridedResponse { result } => result)
     }
 
     fn apply_elementwise_nd<T: TensorValue>(
+    fn apply_elementwise_nd<T: TensorValue>(
         &self,
+        buf: &mut Self::Buf<T>,
         buf: &mut Self::Buf<T>,
         op: (crate::ops::base::OpType, T),
         offset: usize,
         shape: &[usize],
         stride: &[isize],
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let message = Messages::ApplyElementwiseND {
+            buf: buf.to_typeless(),
+            op: make_op!(op.0, op.1),
+            offset,
+            shape: shape.to_vec(),
+            stride: stride.to_vec(),
+        };
+        send_recv!(self, message, Messages::ApplyElementwiseNDResponse { result } => result)
         let message = Messages::ApplyElementwiseND {
             buf: buf.to_typeless(),
             op: make_op!(op.0, op.1),
@@ -338,8 +442,20 @@ impl Backend for RemoteBackend {
         left: (*const Self::Buf<T>, &crate::core::MetaTensor), 
         right: (*const Self::Buf<T>, &crate::core::MetaTensor),
         dst: (*mut Self::Buf<T>, &crate::core::MetaTensor),
+    unsafe fn broadcast<T: TensorValue>(
+        &self,
+        left: (*const Self::Buf<T>, &crate::core::MetaTensor), 
+        right: (*const Self::Buf<T>, &crate::core::MetaTensor),
+        dst: (*mut Self::Buf<T>, &crate::core::MetaTensor),
         op: crate::ops::base::OpType
     ) -> Result<(), crate::core::tensor::TensorError> {
+        let message = Messages::Broadcast {
+            left: ((&*left.0).to_typeless(), left.1.clone()),
+            right: ((&*right.0).to_typeless(), right.1.clone()),
+            dst: ((&*dst.0).to_typeless(), dst.1.clone()),
+            op,
+        };
+        send_recv!(self, message, Messages::BroadcastResponse { result } => result)
         let message = Messages::Broadcast {
             left: ((&*left.0).to_typeless(), left.1.clone()),
             right: ((&*right.0).to_typeless(), right.1.clone()),
@@ -376,26 +492,6 @@ impl<T: TensorValue> BackendMatMul<T> for RemoteBackend {
     }
 }
 
-// todo, make this async
-fn drain_outgoing(remote: RemoteBackend, mut stream: std::net::TcpStream) {
-    let receiver = remote.messages_outgoing_receiver.clone();
-    loop {        
-        if let Ok(req) = receiver.recv() {
-            if remote.is_poisoned() {
-                break;
-            }
-            let serialized = req.serialize().unwrap();
-            let n = serialized.len();
-            let n_bytes = (n as u32).to_le_bytes();
-            stream.write_all(&n_bytes).unwrap();
-            stream.write_all(&serialized).unwrap();
-        } else {
-            // Channel closed, exit thread
-            break;
-        }
-    }
-}
-
 #[inline]
 fn read_response(stream: &mut std::net::TcpStream, len_buf: &mut  [u8; 4]) -> Result<Response, Box<bincode::ErrorKind>> {
     stream.read_exact(len_buf).unwrap();
@@ -417,6 +513,41 @@ fn send_message_to_channel(remote: &RemoteBackend, msg: Response) {
     }
 }
 
+// todo, make this async
+
+/// Thread function to drain outgoing messages and send them over the TCP stream
+/// # Arguments
+/// * `remote` - The RemoteBackend instance
+/// * `stream` - The TCP stream to send messages over
+fn drain_outgoing(remote: RemoteBackend, mut stream: std::net::TcpStream) {
+    let receiver = remote.messages_outgoing_receiver.clone();
+    loop {        
+        if let Ok(req) = receiver.recv() {
+            if remote.is_poisoned() {
+                break;
+            }
+            let serialized = req.serialize().unwrap();
+            let n = serialized.len();
+            let n_bytes = (n as u32).to_le_bytes();
+            stream.write_all(&n_bytes).unwrap();
+            stream.write_all(&serialized).unwrap();
+        } else {
+            // Channel closed, exit thread
+            break;
+        }
+    }
+}
+
+/// Thread function to read incoming messages from the TCP stream
+/// 
+/// Upon receiving a message, if it is marked as not asynchronous, it sends the message to the waiting channel
+/// Otherwise, it handles asynchronous messages accordingly. If the asynchronous message is complete and does not
+/// indicate an error, it simply decrements the pending count. If it indicates an error, it poisons the RemoteBackend to prevent further operations.
+/// If the asynchronous message is not complete, it sends a follow-up message to the waiting channel, and does not decrement the pending count.
+/// 
+/// # Arguments
+/// * `remote` - The RemoteBackend instance
+/// * `stream` - The TCP stream to read messages from
 fn read_incoming(remote: RemoteBackend, mut stream: std::net::TcpStream) {
     let mut len_buf = [0u8; 4];
     loop {
