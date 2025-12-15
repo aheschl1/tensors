@@ -184,7 +184,7 @@ let result = a.dot(&b).unwrap();  // scalar: 15.0
 Still early stage in terms of ergonomics of use.
 
 The protocol includes asynchronous operations, which are transparently handled.
-When a long running operation which acts in place of its operations only, an Ack is returned immediately,
+When a long running operation which acts inplace of its operators only, an Ack is returned immediately,
 and the user process can continue. When a read is needed, there is a sync point.
 
 For example:
