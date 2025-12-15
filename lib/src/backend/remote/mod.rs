@@ -7,11 +7,14 @@ use std::sync::OnceLock;
 
 use crate::backend::remote::client::RemoteBackend;
 
+#[macro_use]
 pub mod server;
 pub mod client;
 pub mod protocol;
+mod enumdispatch;
 #[cfg(test)]
 mod remote_tests;
+
 
 #[cfg(feature = "remote")]
 static REMOTE_BACKENDS: OnceLock<Mutex<HashMap<String, RemoteBackend>>> = OnceLock::new();
