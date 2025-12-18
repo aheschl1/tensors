@@ -93,7 +93,24 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "cuda"))]
+mod cuda_tests {
+    use crate::{core::{primitives::CudaTensor, Tensor}, ops::unary::Negate};
+
+    #[test]
+    fn test_negate_cuda() {
+        let mut tensor = CudaTensor::<f32>::ones((1, 2));
+        tensor.neg_inplace();
+        let expected = CudaTensor::<f32>::from_buf(vec![-1.0, -1.0], (1, 2));
+        assert_eq!(tensor.cpu().unwrap(), expected.unwrap().cpu().unwrap());
+
+        let tensor2 = -tensor;
+        let expected2 = CudaTensor::<f32>::from_buf(vec![1.0, 1.0], (1, 2));
+        assert_eq!(tensor2.cpu().unwrap(), expected2.unwrap().cpu().unwrap());
+    }
+}
+
+#[cfg(all(test, feature = "remote"))]
 mod remote_tests {
     use std::{sync::OnceLock, thread};
 
