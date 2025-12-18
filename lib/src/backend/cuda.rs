@@ -470,7 +470,37 @@ impl Backend for Cuda {
         start: usize,
         len: usize
     ) -> Result<(), TensorError> {
-        todo!()
+        let stream = self.stream();
+
+        macro_rules! launch_negate {
+            ($launch_fn:ident, $t:ty) => {{
+                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                let data_ptr = raw_ptr as *mut $t;
+
+                unsafe {
+                    $launch_fn(
+                        data_ptr as *mut $t,
+                        start,
+                        len,
+                        DEFAULT_BLOCK_SIZE,
+                    );
+                }
+                self.dirty();
+                Ok(())
+            }};
+        }
+
+        // Dispatch based on type - only signed types support negation
+        match std::any::TypeId::of::<T>() {
+            id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_negate_contiguous_f32, f32),
+            id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_negate_contiguous_f64, f64),
+            id if id == std::any::TypeId::of::<i8>() => launch_negate!(launch_negate_contiguous_i8, i8),
+            id if id == std::any::TypeId::of::<i16>() => launch_negate!(launch_negate_contiguous_i16, i16),
+            id if id == std::any::TypeId::of::<i32>() => launch_negate!(launch_negate_contiguous_i32, i32),
+            id if id == std::any::TypeId::of::<i64>() => launch_negate!(launch_negate_contiguous_i64, i64),
+            id if id == std::any::TypeId::of::<i128>() => launch_negate!(launch_negate_contiguous_i128, i128),
+            _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
+        }
     }
     
     fn apply_neg_1d_strided<T: TensorValue>(
@@ -479,7 +509,38 @@ impl Backend for Cuda {
         stride: isize,
         len: usize
     ) -> Result<(), TensorError> {
-        todo!()
+        let stream = self.stream();
+
+        macro_rules! launch_negate {
+            ($launch_fn:ident, $t:ty) => {{
+                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                let data_ptr = raw_ptr as *mut $t;
+
+                unsafe {
+                    $launch_fn(
+                        data_ptr as *mut $t,
+                        offset,
+                        stride,
+                        len,
+                        DEFAULT_BLOCK_SIZE,
+                    );
+                }
+                self.dirty();
+                Ok(())
+            }};
+        }
+
+        // Dispatch based on type - only signed types support negation
+        match std::any::TypeId::of::<T>() {
+            id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_negate_strided_f32, f32),
+            id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_negate_strided_f64, f64),
+            id if id == std::any::TypeId::of::<i8>() => launch_negate!(launch_negate_strided_i8, i8),
+            id if id == std::any::TypeId::of::<i16>() => launch_negate!(launch_negate_strided_i16, i16),
+            id if id == std::any::TypeId::of::<i32>() => launch_negate!(launch_negate_strided_i32, i32),
+            id if id == std::any::TypeId::of::<i64>() => launch_negate!(launch_negate_strided_i64, i64),
+            id if id == std::any::TypeId::of::<i128>() => launch_negate!(launch_negate_strided_i128, i128),
+            _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
+        }
     }
     
     fn apply_neg_nd<T: TensorValue>(
@@ -489,7 +550,59 @@ impl Backend for Cuda {
         shape: &[usize],
         stride: &[isize],
     ) -> Result<(), TensorError> {
-        todo!()
+        let stream = self.stream();
+        let rank = shape.len();
+        let size = shape.iter().product::<usize>();
+
+        // Allocate device memory for strides and shapes
+        let shape_buf = self.alloc_from_slice(
+            shape.to_vec()
+            .into_iter()
+            .map(|x| x as u64)
+            .collect::<Vec<u64>>()
+            .into_boxed_slice())?;
+        let stride_buf = self.alloc_from_slice(
+            stride.to_vec()
+            .into_iter()
+            .map(|x| x as i64)
+            .collect::<Vec<i64>>()
+            .into_boxed_slice())?;
+
+        let (stride_ptr, _) = stride_buf.ptr.device_ptr(&stream);
+        let (shape_ptr, _) = shape_buf.ptr.device_ptr(&stream);
+
+        macro_rules! launch_negate {
+            ($launch_fn:ident, $t:ty) => {{
+                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                let data_ptr = raw_ptr as *mut $t;
+
+                unsafe {
+                    $launch_fn(
+                        data_ptr as *mut $t,
+                        offset,
+                        stride_ptr as *const isize,
+                        shape_ptr as *const usize,
+                        rank,
+                        size,
+                        DEFAULT_BLOCK_SIZE,
+                    );
+                }
+                self.dirty();
+                Ok(())
+            }};
+        }
+
+        // Dispatch based on type - only signed types support negation
+        match std::any::TypeId::of::<T>() {
+            id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_negate_nd_affine_f32, f32),
+            id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_negate_nd_affine_f64, f64),
+            id if id == std::any::TypeId::of::<i8>() => launch_negate!(launch_negate_nd_affine_i8, i8),
+            id if id == std::any::TypeId::of::<i16>() => launch_negate!(launch_negate_nd_affine_i16, i16),
+            id if id == std::any::TypeId::of::<i32>() => launch_negate!(launch_negate_nd_affine_i32, i32),
+            id if id == std::any::TypeId::of::<i64>() => launch_negate!(launch_negate_nd_affine_i64, i64),
+            id if id == std::any::TypeId::of::<i128>() => launch_negate!(launch_negate_nd_affine_i128, i128),
+            _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
+        }
     }
 }
 

@@ -47,6 +47,31 @@ void launch_elementwise_nd_affine_i64(int64_t* data, size_t offset, const ptrdif
 void launch_elementwise_nd_affine_i128(__int128_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, uint8_t op, __int128_t value, unsigned int block_size);
 void launch_elementwise_nd_affine_boolean(bool* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, uint8_t op, bool value, unsigned int block_size);
 
+// Negation operations
+void launch_negate_contiguous_f32(float* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_f64(double* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_i8(int8_t* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_i16(int16_t* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_i32(int32_t* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_i64(int64_t* data, size_t start, size_t len, unsigned int block_size);
+void launch_negate_contiguous_i128(__int128_t* data, size_t start, size_t len, unsigned int block_size);
+
+void launch_negate_strided_f32(float* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_f64(double* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_i8(int8_t* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_i16(int16_t* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_i32(int32_t* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_i64(int64_t* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+void launch_negate_strided_i128(__int128_t* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
+
+void launch_negate_nd_affine_f32(float* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_f64(double* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_i8(int8_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_i16(int16_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_i32(int32_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_i64(int64_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+void launch_negate_nd_affine_i128(__int128_t* data, size_t offset, const ptrdiff_t* stride, const size_t* shape, size_t rank, size_t size, unsigned int block_size);
+
 // void launch_elementwise_scattered_f32(float* data, const size_t* offsets, size_t n, uint8_t op, float value, unsigned int block_size);
 // void launch_elementwise_scattered_f64(double* data, const size_t* offsets, size_t n, uint8_t op, double value, unsigned int block_size);
 // void launch_elementwise_scattered_u8(uint8_t* data, const size_t* offsets, size_t n, uint8_t op, uint8_t value, unsigned int block_size);

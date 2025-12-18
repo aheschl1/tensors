@@ -410,11 +410,19 @@ fn build_cuda_kernels() {
     
     for kernel_file in &kernel_files {
         
+        // Create a unique object file name by including the parent directory
+        // This prevents conflicts when multiple .cu files have the same name
+        // (e.g., scalar/contiguous.cu and unary/contiguous.cu)
+        let parent_name = kernel_file.parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        
         let file_stem = kernel_file.file_stem()
             .and_then(|s| s.to_str())
             .expect("Invalid kernel filename");
         
-        let obj_file = out_dir.join(format!("{}.o", file_stem));
+        let obj_file = out_dir.join(format!("{}_{}.o", parent_name, file_stem));
         
         println!("Compiling {} to object file...", kernel_file.display());
 
