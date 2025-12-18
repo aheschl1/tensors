@@ -1,5 +1,3 @@
-
-
 use crate::{core::{meta::ContiguityTypes, tensor::TensorError, value::TensorValue, MetaTensor, MetaTensorView}, ops::base::BinaryOpType};
 
 pub mod cpu;

@@ -16,8 +16,6 @@ mod bindings{
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-const ADD_KERNEL_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/add.ptx"));
-
 pub struct CudaBackend {
     context: Arc<CudaContext>,
 }
@@ -44,51 +42,6 @@ impl Default for CudaBackend {
     }
 }
 
-
-pub fn example_add() -> Result<Vec<f32>, TensorError> {
-    // Initialize CUDA backend
-    let backend = CudaBackend::new()?;
-    let ctx = &backend.context;
-    let stream = ctx.default_stream();
-    
-    // Compile and load PTX module
-    let module = ctx.load_module(Ptx::from_src(ADD_KERNEL_PTX))
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    let kernel = module.load_function("add_kernel")
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    
-    // Prepare host data
-    let n = 10000_usize;
-    let a: Vec<f32> = (0..n).map(|i| i as f32).collect();
-    let b: Vec<f32> = (0..n).map(|i| (i * 2) as f32).collect();
-    
-    // Copy to GPU using stream
-    let dev_a = stream.clone_htod(&a)
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    let dev_b = stream.clone_htod(&b)
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    let mut dev_c = stream.alloc_zeros::<f32>(n)
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    
-    // Launch kernel using builder pattern
-    let mut launch_args = stream.launch_builder(&kernel);
-    launch_args.arg(&dev_a);
-    launch_args.arg(&dev_b);
-    launch_args.arg(&mut dev_c);
-    launch_args.arg(&n);
-    
-    let cfg = LaunchConfig::for_num_elems(n as u32);
-    unsafe {
-        launch_args.launch(cfg)
-            .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    }
-    
-    // Copy result back to host
-    let result = stream.clone_dtoh(&dev_c)
-        .map_err(|e| TensorError::CudaError(e.to_string()))?;
-    
-    Ok(result)
-}
 
 #[cfg(test)]
 #[cfg(feature = "cuda")]
@@ -121,19 +74,6 @@ mod tests {
     fn test_cuda_backend_init() {
         let backend = CudaBackend::new();
         assert!(backend.is_ok(), "Failed to initialize CUDA backend");
-    }
-    
-    #[test]
-    fn test_cuda_add() {
-        let result = example_add();
-        assert!(result.is_ok(), "CUDA addition failed");
-        
-        let result = result.unwrap();
-        assert_eq!(result.len(), 10000);
-        
-        assert_eq!(result[0], 0.0);
-        assert_eq!(result[1], 3.0);
-        assert_eq!(result[2], 6.0);
     }
 
     #[test]
