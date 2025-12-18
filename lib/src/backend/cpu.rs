@@ -1,5 +1,7 @@
 
-use crate::{backend::{Backend, BackendMatMul}, core::{meta::TensorOffsetIterator, tensor::TensorError, value::{types, TensorValue}, MetaTensor}, openblas::{blasint, cblas_dgemm, cblas_sgemm, CBLAS_ORDER, CBLAS_TRANSPOSE}, ops::base::BinaryOpType};
+use std::ops::Div;
+
+use crate::{backend::{Backend, BackendMatMul}, core::{MetaTensor, meta::TensorOffsetIterator, primops::InvExp, tensor::TensorError, value::{TensorValue, types}}, openblas::{CBLAS_ORDER, CBLAS_TRANSPOSE, blasint, cblas_dgemm, cblas_sgemm}, ops::base::BinaryOpType};
 use crate::backend::ContiguityTypes;
 use crate::core::value::TypeConstants;
 
@@ -40,6 +42,51 @@ macro_rules! elemwise_nd_loop {
     }};
 }
 
+
+macro_rules! impl_cpu_unary {
+    ($name:ident, $func:ident $( where $($extra:tt)+ )?) => {
+        paste::paste! {
+            fn [<apply_ $name _1d_strided>]<T: TensorValue>(
+                &self, buf: &mut Self::Buf<T>, 
+                    offset: usize,
+                    stride: isize,
+                    len: usize
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                let bufptr = buf.as_mut();
+                elemwise_1d_strided_loop!(bufptr, offset, stride, len, |x| $func(x));
+                Ok(())
+            }
+
+            fn [<apply_ $name _contiguous>]<T: TensorValue>(
+                &self, buf: &mut Self::Buf<T>, 
+                    start: usize,
+                    len: usize
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                let bufptr = buf.as_mut();
+                elemwise_contiguous_loop!(bufptr, start, len, |x| $func(x) );
+                Ok(())
+            }
+
+            fn [<apply_ $name _nd>]<T: TensorValue>(
+                    &self,
+                    buf: &mut Self::Buf<T>,
+                    offset: usize,
+                    shape: &[usize],
+                    stride: &[isize],
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                let bufptr = buf.as_mut();
+                elemwise_nd_loop!(bufptr, offset, shape, stride, |x| $func(x));
+                Ok(())
+            }
+        }
+    };
+}
 
 
 impl Backend for Cpu {
@@ -224,39 +271,37 @@ impl Backend for Cpu {
         Ok(())
     }
     
-    fn apply_neg_contiguous<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self, buf: &mut Self::Buf<T>, 
-        start: usize,
-        len: usize
-    ) -> Result<(), TensorError> {
-        let bufptr = buf.as_mut();
-        elemwise_contiguous_loop!(bufptr, start, len, |x| -(*x));
-        Ok(())
-    }
     
-    fn apply_neg_1d_strided<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self, buf: &mut Self::Buf<T>, 
-        offset: usize,
-        stride: isize,
-        len: usize
-    ) -> Result<(), TensorError> {
-        let bufptr = buf.as_mut();
-        elemwise_1d_strided_loop!(bufptr, offset, stride, len, |x| -(*x));
-        Ok(())
-    }
-    
-    fn apply_neg_nd<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self,
-        buf: &mut Self::Buf<T>,
-        offset: usize,
-        shape: &[usize],
-        stride: &[isize],
-    ) -> Result<(), TensorError> {
-        let bufptr = buf.as_mut();
-        elemwise_nd_loop!(bufptr, offset, shape, stride, |x| -(*x));
-        Ok(())
-    }
 
+    impl_cpu_unary!{ neg, _negate where T: std::ops::Neg<Output = T> }
+    impl_cpu_unary!{ relu, _relu }
+    impl_cpu_unary!{ sigmoid, _sigmoid where T: InvExp }
+
+}
+
+#[inline]
+fn _negate<T: TensorValue + std::ops::Neg<Output = T>>(x: &mut T) -> T {
+    -*x
+}
+
+
+#[inline]
+fn _relu<T: TensorValue>(x: &mut T) -> T {
+    if *x > T::ZERO {
+        *x
+    } else {
+        T::ZERO
+    }
+}
+
+/// The sigmoid function, implemented based
+/// on a quick google search.
+#[inline]
+fn _sigmoid<T: TensorValue>(x: &mut T) -> T
+where 
+    T: InvExp
+{
+    T::ONE / (T::ONE + x.apply_invexp())
 }
 
 macro_rules! blas_impl {

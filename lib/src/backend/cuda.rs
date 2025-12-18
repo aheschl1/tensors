@@ -87,6 +87,46 @@ impl Cuda {
     }
 }
 
+macro_rules! impl_cpu_unary {
+    ($name:ident, $func:ident $( where $($extra:tt)+ )?) => {
+        paste::paste! {
+            fn [<apply_ $name _1d_strided>]<T: TensorValue>(
+                &self, buf: &mut Self::Buf<T>, 
+                    offset: usize,
+                    stride: isize,
+                    len: usize
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                todo!()
+            }
+
+            fn [<apply_ $name _contiguous>]<T: TensorValue>(
+                &self, buf: &mut Self::Buf<T>, 
+                    start: usize,
+                    len: usize
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                todo!()
+            }
+
+            fn [<apply_ $name _nd>]<T: TensorValue>(
+                    &self,
+                    buf: &mut Self::Buf<T>,
+                    offset: usize,
+                    shape: &[usize],
+                    stride: &[isize],
+                ) -> Result<(), TensorError>
+                $( where $($extra)+ )?
+                {
+                todo!()
+            }
+        }
+    };
+}
+
+
 impl Backend for Cuda {
     type Buf<T: TensorValue> = CudaBuf<T>;
     
@@ -604,6 +644,15 @@ impl Backend for Cuda {
             _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
         }
     }
+
+    impl_cpu_unary!{ relu, _temp }
+    // impl_cpu_unary! { neg, _temp }
+    impl_cpu_unary! { sigmoid, _temp }
+}
+
+
+pub fn _temp<T: TensorValue>(x: &mut T) -> T {
+    *x
 }
 
 macro_rules! generic_matmul_impl {

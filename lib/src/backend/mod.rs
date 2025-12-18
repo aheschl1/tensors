@@ -1,6 +1,6 @@
 
 
-use crate::{core::{meta::ContiguityTypes, tensor::TensorError, value::TensorValue, MetaTensor, MetaTensorView}, ops::base::BinaryOpType};
+use crate::{core::{MetaTensor, MetaTensorView, meta::ContiguityTypes, primops::InvExp, tensor::TensorError, value::TensorValue}, ops::base::BinaryOpType};
 
 pub mod cpu;
 
@@ -89,6 +89,56 @@ macro_rules! elementwise_unary_dispatch {
     }};
 }
 
+use paste::paste;
+
+
+macro_rules! specify_trait_unary_cabal {
+    ($name:ident $( where $($extra:tt)+ )?) => {
+        paste! {
+            fn [<apply_ $name>]<T: TensorValue>(&self, buf: &mut Self::Buf<T>, meta: &MetaTensor) -> Result<(), TensorError>
+            $( where $($extra)+ )?
+            {
+                elementwise_unary_dispatch!(
+                    self,
+                    buf,
+                    meta,
+                    contiguous = [<apply_ $name _contiguous>],
+                    strided1d  = [<apply_ $name _1d_strided>],
+                    nd         = [<apply_ $name _nd>]
+                )
+            }
+        
+        
+
+            fn [<apply_ $name _nd>]<T: TensorValue>(
+                &self,
+                buf: &mut Self::Buf<T>,
+                offset: usize,
+                shape: &[usize],
+                stride: &[isize],
+            ) -> Result<(), TensorError>
+            $( where $($extra)+ )?
+            ;
+
+            fn [<apply_ $name _1d_strided>]<T: TensorValue>(
+            &self, buf: &mut Self::Buf<T>, 
+                offset: usize,
+                stride: isize,
+                len: usize
+            ) -> Result<(), TensorError>
+            $( where $($extra)+ )?
+            ;
+
+            fn [<apply_ $name _contiguous>]<T: TensorValue>(
+            &self, buf: &mut Self::Buf<T>, 
+                start: usize,
+                len: usize
+            ) -> Result<(), TensorError>
+            $( where $($extra)+ )?;
+        }
+    };
+}
+
 
 pub trait Backend: Send + Sync + 'static + Clone {
     type Buf<T: TensorValue>: Send + Sync;
@@ -153,37 +203,10 @@ pub trait Backend: Send + Sync + 'static + Clone {
         )
     }
 
-    fn apply_neg_contiguous<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self, buf: &mut Self::Buf<T>, 
-        start: usize,
-        len: usize
-    ) -> Result<(), TensorError>;
-
-    fn apply_neg_1d_strided<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self, buf: &mut Self::Buf<T>, 
-        offset: usize,
-        stride: isize,
-        len: usize
-    ) -> Result<(), TensorError>;
-
-    fn apply_neg_nd<T: TensorValue + std::ops::Neg<Output = T>>(
-        &self,
-        buf: &mut Self::Buf<T>,
-        offset: usize,
-        shape: &[usize],
-        stride: &[isize],
-    ) -> Result<(), TensorError>;
-
-    fn apply_neg<T: TensorValue + std::ops::Neg<Output = T>>(&self, buf: &mut Self::Buf<T>, meta: &MetaTensor) -> Result<(), TensorError> {
-        elementwise_unary_dispatch!(
-            self,
-            buf,
-            meta,
-            contiguous = apply_neg_contiguous,
-            strided1d  = apply_neg_1d_strided,
-            nd         = apply_neg_nd
-        )
-    }
+    
+    specify_trait_unary_cabal!{neg where T: std::ops::Neg<Output = T>}
+    specify_trait_unary_cabal!{relu}
+    specify_trait_unary_cabal!{sigmoid where T: InvExp}
 }
 
 pub trait BackendMatMul<T: TensorValue>: Backend {

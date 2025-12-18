@@ -1,8 +1,12 @@
-use crate::{backend::Backend, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::TensorValue}};
+use crate::{backend::Backend, core::{primitives::TensorBase, primops::InvExp, tensor::{AsTensor, AsViewMut}, value::TensorValue}};
 
 pub mod neg;
+pub mod relu;
+mod sigmoid;
 
 pub use neg::Negate;
+pub use relu::Relu;
+pub use sigmoid::Sigmoid;
 
 pub trait InplaceUnaryOp<T: TensorValue, B: Backend> {
     fn apply_relu(
@@ -10,7 +14,10 @@ pub trait InplaceUnaryOp<T: TensorValue, B: Backend> {
     );
     fn apply_sigmoid(
         &mut self
-    );
+    )
+    where 
+        T: InvExp
+    ;
     fn apply_tanh(
         &mut self
     );
@@ -22,7 +29,9 @@ pub trait UnaryOp<T: TensorValue, B: Backend> {
     ) -> TensorBase<T, B>;
     fn sigmoid(
         &self,
-    ) -> TensorBase<T, B>;
+    ) -> TensorBase<T, B>
+    where 
+        T: InvExp;
     fn tanh(
         &self,
     ) -> TensorBase<T, B>;
@@ -33,13 +42,16 @@ impl<T: TensorValue, B: Backend, V: AsViewMut<T, B>> InplaceUnaryOp<T, B> for V 
     fn apply_relu(
         &mut self
     ) {
-        todo!()
+        self.relu_inplace();
     }
 
     fn apply_sigmoid(
         &mut self
-    ) {
-        todo!()
+    )
+    where 
+        T: InvExp
+    {
+        self.sigmoid_inplace();
     }
 
     fn apply_tanh(
@@ -61,7 +73,10 @@ impl<T: TensorValue, B: Backend, V: AsTensor<T, B>> UnaryOp<T, B> for V {
 
     fn sigmoid(
         &self,
-    ) -> TensorBase<T, B> {
+    ) -> TensorBase<T, B>
+    where 
+        T: InvExp
+    {
         let mut result = self.owned();
         result.apply_sigmoid();
         result
@@ -78,7 +93,7 @@ impl<T: TensorValue, B: Backend, V: AsTensor<T, B>> UnaryOp<T, B> for V {
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::Tensor, ops::unary::Negate};
+    use crate::{core::Tensor, ops::unary::{InplaceUnaryOp, Negate, Relu}};
 
     #[test]
     fn test_negate() {
@@ -90,6 +105,34 @@ mod tests {
         let tensor2 = -tensor;
         let expected2 = Tensor::<f32>::from_buf(vec![1.0, 1.0], (1, 2));
         assert_eq!(tensor2, expected2.unwrap());
+    }
+
+    #[test]
+    fn test_relu() {
+        let mut tensor = Tensor::<f32>::ones((1, 2));
+        tensor.apply_relu();
+        assert_eq!(tensor, Tensor::<f32>::ones((1, 2)));
+
+
+        let mut tensor = Tensor::<f32>::from_buf(vec![-1.0, -1.0], (1, 2)).unwrap();
+        tensor.apply_relu();
+        assert_eq!(tensor, Tensor::<f32>::zeros((1, 2)));
+
+        // let tensor2 = -tensor;
+        // let expected2 = Tensor::<f32>::from_buf(vec![1.0, 1.0], (1, 2));
+        // assert_eq!(tensor2, expected2.unwrap());
+    }
+
+      #[test]
+    fn test_sigmoid() {
+        let mut tensor = Tensor::<f32>::ones((1, 2));
+        tensor.apply_sigmoid();
+        assert_eq!(tensor, Tensor::<f32>::from_buf(vec![0.7310586, 0.7310586], (1, 2)).unwrap());
+
+
+        // let tensor2 = -tensor;
+        // let expected2 = Tensor::<f32>::from_buf(vec![1.0, 1.0], (1, 2));
+        // assert_eq!(tensor2, expected2.unwrap());
     }
 }
 

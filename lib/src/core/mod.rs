@@ -6,6 +6,7 @@ pub mod idx;
 pub mod value;
 pub mod slice;
 pub mod untyped;
+pub mod primops;
 
 pub use meta::{Dim, Shape, Strides, MetaTensor, MetaTensorView, shape_to_stride};
 pub use primitives::{Tensor, TensorView, CpuTensorView, TensorViewMut};
