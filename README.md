@@ -227,3 +227,70 @@ let result_add = a + b; // Logical OR
 let result_sub = a - b; // Logical XOR
 let result_mul = a * b; // Logical AND
 ```
+
+## CUDA Setup
+
+### Installing CUDA Toolkit
+
+#### Ubuntu/Debian
+
+1. **Install NVIDIA drivers (if not already installed):**
+
+When this is done, nvidia-smi should exist.
+```bash
+sudo apt install nvidia-driver-535
+```
+
+2. **Install CUDA Toolkit:**
+Option A: From default repositories:
+```bash
+sudo apt install nvidia-cuda-toolkit
+```
+   
+Option B: From NVIDIA's official repository:
+
+https://developer.nvidia.com/cuda-downloads
+
+3. **Verify installation:**
+```bash
+nvcc --version
+nvidia-smi
+```
+
+### Building with CUDA Support
+
+Once CUDA is installed, build the project with the `cuda` feature:
+
+```bash
+cargo build --features cuda
+cargo test --features cuda
+```
+
+### Troubleshooting
+
+**nvcc not found:**
+- Ensure CUDA bin directory is in your PATH
+- The build script searches common paths: `/usr/local/cuda/bin/nvcc`, `/usr/bin/nvcc`, etc.
+
+**CUDA libraries not found:**
+- Check that `libcudart.so` exists in `/usr/local/cuda/lib64` or `/usr/lib/x86_64-linux-gnu`
+- Verify `LD_LIBRARY_PATH` includes the CUDA library directory
+
+**Compute capability mismatch:**
+- The project is configured for compute capability 8.6 (sm_86) by default
+- Edit `lib/build.rs` to change `arch` and `code` variables to match your GPU
+- Common values: `sm_75` (Turing), `sm_80` (Ampere), `sm_86` (RTX 30xx), `sm_89` (RTX 40xx)
+
+**Out of memory errors:**
+- Reduce tensor sizes in your operations
+- GPU memory is more limited than system RAM
+- Use `.cpu()` to move tensors back to CPU when not needed on GPU
+
+### Architecture Support
+
+The build script automatically compiles CUDA kernels for the specified architecture. Current target is sm_86 (GeForce RTX 30 series). To target a different architecture, modify the `arch` and `code` variables in `lib/build.rs`:
+
+```rust
+let arch = "compute_75";  // Change to your compute capability
+let code = "sm_75";       // Change to match
+```
