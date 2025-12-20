@@ -1,7 +1,8 @@
 use std::fmt::Debug;
 
-use crate::{backend::{Backend, cpu::Cpu, cuda::Cuda}, core::{MetaTensorView, Slice, Tensor, TensorView, TensorViewMut, primitives::TensorBase, tensor::{AsTensor, TensorAccess, TensorAccessMut}, value::TensorValue}};
-
+use crate::{backend::{Backend, cpu::Cpu}, core::{MetaTensorView, Slice, Tensor, TensorView, TensorViewMut, primitives::TensorBase, tensor::{AsTensor, TensorAccess, TensorAccessMut}, value::TensorValue}};
+#[cfg(feature = "cuda")]
+use crate::backend::cuda::Cuda;
 
 
 pub fn test_with_contiguous_2_elem_tensor<T, F, B>(definition: [T; 2], functor: F)
