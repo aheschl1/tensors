@@ -259,31 +259,7 @@ fn build_cuda_kernels() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // Specify the desired architecture version.
-    let arch = "compute_86"; 
-    let code = "sm_86";
-
-    // Build add.cu to PTX (for runtime JIT compilation in tests)
-    let add_cu = PathBuf::from("cuda/kernels/legacy/add.cu");
-    if add_cu.exists() {
-        let ptx_file = out_dir.join("add.ptx");
-
-        let nvcc_status = Command::new(&nvcc)
-            .arg("-ptx")
-            .arg("-o")
-            .arg(&ptx_file)
-            .arg(&add_cu)
-            .arg(format!("-arch={}", arch))
-            .arg(format!("-code={}", code))
-            .arg("-I")
-            .arg("cuda/include")
-            .status()
-            .unwrap();
-
-        assert!(
-            nvcc_status.success(),
-            "Failed to compile add.cu to PTX."
-        );
-    }
+    let arch = "sm_86";
 
     // Build all other .cu files to object files (for static linking)
     // Note: add.cu in legacy/ is excluded as it's only used for PTX generation

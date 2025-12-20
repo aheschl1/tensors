@@ -7,10 +7,6 @@ __global__ void negate_contiguous_kernel(
     size_t start,
     size_t len
 ) {
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("kernel launched: start=%zu len=%zu\n", start, len);
-    //     fflush(stdout);
-    // }
   
     // grid-stride loop
     for (size_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -33,35 +29,9 @@ void launch_negate_contiguous_op(
 
     block_size = ALIGN_BLOCK_SIZE(block_size);
 
-    
-
-    // printf("Hi\n");
-    // cudaDeviceSynchronize();
-
     const unsigned int grid = std::min((unsigned int)((len + block_size - 1) / block_size), 65535u);
     negate_contiguous_kernel<T><<<grid, block_size>>>(data, start, len);
 
-    // cudaError_t e2 = cudaGetLastError();
-    // fprintf(stderr, "cudaGetLastError after launch: %s\n", cudaGetErrorString(e2));
-
-    // printf("Done grid=%d, block_size=%d\n", grid, block_size);
-
-    
-
-    // cudaPointerAttributes attr;
-    // cudaError_t e = cudaPointerGetAttributes(&attr, data);
-    // fprintf(stderr, "cudaPointerGetAttributes: %s\n", cudaGetErrorString(e));
-    // if (e == cudaSuccess) {
-    //     #if CUDART_VERSION >= 10000
-    //         fprintf(stderr, "  type=%d (1=host,2=device,3=managed)\n", (int)attr.type);
-    //     #else
-    //         fprintf(stderr, "  memoryType=%d (1=host,2=device)\n", (int)attr.memoryType);
-    //     #endif
-    // }
-
-    // cudaDeviceSynchronize();
-    // fflush(stdout);
-    // fflush(stderr);
 }
 
 
@@ -71,12 +41,6 @@ __global__ void relu_contiguous_kernel(
     size_t start,
     size_t len
 ) {
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("kernel launched: start=%zu len=%zu\n", start, len);
-    //     fflush(stdout);
-    // }
-  
-    // grid-stride loop
     for (size_t i = blockIdx.x * blockDim.x + threadIdx.x;
          i < len;
          i += blockDim.x * gridDim.x) {
@@ -85,8 +49,6 @@ __global__ void relu_contiguous_kernel(
         if (data[idx] < (T) 0) {
             data[idx] = 0;
         }
-        // data[idx] = (T)0;
-        // data[idx] = -data[idx];
     }
 }
 
@@ -141,11 +103,6 @@ __global__ void sigmoid_contiguous_kernel(
     size_t start,
     size_t len
 ) {
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("kernel launched: start=%zu len=%zu\n", start, len);
-    //     fflush(stdout);
-    // }
-  
     // grid-stride loop
     for (size_t i = blockIdx.x * blockDim.x + threadIdx.x;
          i < len;
@@ -153,8 +110,6 @@ __global__ void sigmoid_contiguous_kernel(
         
         size_t idx = start + i;
         data[idx] = ((T) 1) / (((T) 1) + exp(-data[idx]));
-        // data[idx] = (T)0;
-        // data[idx] = -data[idx];
     }
 }
 
@@ -188,12 +143,6 @@ __global__ void tanh_contiguous_kernel(
     size_t start,
     size_t len
 ) {
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("kernel launched: start=%zu len=%zu\n", start, len);
-    //     fflush(stdout);
-    // }
-  
-    // grid-stride loop
     for (size_t i = blockIdx.x * blockDim.x + threadIdx.x;
          i < len;
          i += blockDim.x * gridDim.x) {
@@ -204,10 +153,6 @@ __global__ void tanh_contiguous_kernel(
         T b = exp(-data[idx]);
 
         data[idx] = (a - b) / (a + b);
-
-        // data[idx] = ((T) 1) / (((T) 1) + exp(-data[idx]));
-        // data[idx] = (T)0;
-        // data[idx] = -data[idx];
     }
 }
 
