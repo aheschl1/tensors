@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::Hash};
 use rand::distr::uniform;
 use slotmap::new_key_type;
 
-use crate::{backend::Backend, core::{primitives::TensorBase, tensor::{RandomTensor, TensorError}, value::TensorValue, MetaTensorView}};
+use crate::{backend::{cpu::Cpu, Backend, BackendMatMul}, core::{primitives::TensorBase, tensor::{RandomTensor, TensorError}, value::{TensorValue, WeightValue}, MetaTensorView}};
 use crate::ops::linalg::MatMul;
 
 #[derive(thiserror::Error)]
@@ -15,12 +15,18 @@ pub enum GraphError {
     ComputationError(String),
 }
 
+impl From<TensorError> for GraphError {
+    fn from(err: TensorError) -> Self {
+        GraphError::ComputationError(format!("Tensor error: {}", err))
+    }
+}
+
 
 new_key_type! {
     pub struct TensorId;
 }
 
-pub trait Node<T: TensorValue, B: Backend> {
+pub trait Node<T: TensorValue + WeightValue, B: Backend> {
     fn id(&self) -> usize;
     fn weights(&self) -> &HashMap<String, TensorBase<T, B>>;
     fn apply(&self, inputs: Vec<TensorBase<T, B>>) -> Result<Vec<TensorBase<T, B>>, GraphError>;
@@ -48,7 +54,7 @@ impl<T: TensorValue, B: Backend> Group<T, B> {
 
 }
 
-impl<T: TensorValue, B: Backend> Node<T, B> for Group<T, B> {
+impl<T: TensorValue + WeightValue, B: BackendMatMul<T>> Node<T, B> for Group<T, B> {
     fn id(&self) -> usize {
         todo!()
     }
@@ -64,13 +70,13 @@ impl<T: TensorValue, B: Backend> Node<T, B> for Group<T, B> {
 
 
 /// linear layer operates over a tensor of size [B, in_features] and produces a tensor of size [B, out_features]
-struct Linear<T: TensorValue, B: Backend> {
+pub struct LinearBase<T: TensorValue + WeightValue, B: Backend> {
     in_features: usize,
     out_features: usize,
     weights: HashMap<String, TensorBase<T, B>>,
 }
 
-impl <T: TensorValue + uniform::SampleUniform, B: Backend> Linear<T, B> {
+impl <T: TensorValue + WeightValue, B: Backend> LinearBase<T, B> {
     pub fn new(in_features: usize, out_features: usize) -> Result<Self, TensorError> {
         Self::new_random(in_features, out_features)
     }
@@ -91,7 +97,9 @@ impl <T: TensorValue + uniform::SampleUniform, B: Backend> Linear<T, B> {
     }
 }
 
-impl<T: TensorValue, B: Backend> Node<T, B> for Linear<T, B> {
+pub type Linear = LinearBase<f32, Cpu>;
+
+impl<T: TensorValue + WeightValue, B: BackendMatMul<T>> Node<T, B> for LinearBase<T, B> {
     fn id(&self) -> usize {
         todo!()
     }
@@ -100,7 +108,8 @@ impl<T: TensorValue, B: Backend> Node<T, B> for Linear<T, B> {
         &self.weights
     }
 
-    fn apply(&self, inputs: Vec<TensorBase<T, B>>) -> Result<Vec<TensorBase<T, B>>, GraphError> {
+    fn apply(&self, inputs: Vec<TensorBase<T, B>>) -> Result<Vec<TensorBase<T, B>>, GraphError> 
+    {
         if inputs.len() != 1 {
             return Err(GraphError::InvalidInput(
                 "Linear layer expects a single input tensor".to_string(),
@@ -109,9 +118,9 @@ impl<T: TensorValue, B: Backend> Node<T, B> for Linear<T, B> {
 
         let input = &inputs[0];
 
-        if input.size() != 2 || input.shape()[1] != self.in_features {
+        if input.rank() < 2 || input.shape()[1] != self.in_features {
             return Err(GraphError::InvalidInput(
-                format!("Input tensor must have shape [B, {}]", self.in_features),
+                format!("Input tensor must have shape [B, {}]. Got {:?}", self.in_features, input.shape()),
             ));
         }
 
@@ -122,9 +131,24 @@ impl<T: TensorValue, B: Backend> Node<T, B> for Linear<T, B> {
             GraphError::ComputationError("Bias tensor not found".to_string())
         })?;
 
-        let output = input.matmul(weight)?.add(bias)?;
+        let output = input.matmul(weight).map_err(|x| GraphError::from(x))? + bias;
 
         Ok(vec![output])
         
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{core::{MetaTensorView, Tensor}, graph::{Linear, Node}};
+
+    #[test]
+    fn test_linear() {
+        let linear = Linear::new(2, 3).unwrap();
+        assert_eq!(linear.in_features, 2);
+        assert_eq!(linear.out_features, 3);
+        let input = Tensor::<f32>::ones((5, 2));
+        let out = linear.apply(vec![input]).unwrap();
+        assert_eq!(out[0].shape().as_slice(), &[5, 3]);
     }
 }

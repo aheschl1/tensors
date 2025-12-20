@@ -1,5 +1,5 @@
 
-use crate::{backend::Backend, core::{idx::Idx, meta::is_contiguous_relaxed, primitives::{DeviceType, TensorBase}, value::TensorValue, Dim, MetaTensor, MetaTensorView, Shape, Strides, TensorView, TensorViewMut}};
+use crate::{backend::Backend, core::{idx::Idx, meta::is_contiguous_relaxed, primitives::{DeviceType, TensorBase}, value::{TensorValue, WeightValue}, Dim, MetaTensor, MetaTensorView, Shape, Strides, TensorView, TensorViewMut}};
 use super::slice::{Slice, compute_sliced_parameters};
 use thiserror::Error;
 
@@ -509,7 +509,7 @@ pub trait RandomTensor<T: TensorValue + rand::distr::uniform::SampleUniform, B: 
     fn uniform(shape: impl Into<Shape>) -> Result<TensorBase<T, B>, TensorError>;
 }
 
-impl<T: TensorValue + rand::distr::uniform::SampleUniform, B: Backend> RandomTensor<T, B> for TensorBase<T, B> {
+impl<T: TensorValue + WeightValue, B: Backend> RandomTensor<T, B> for TensorBase<T, B> {
     fn uniform(shape: impl Into<Shape>) -> Result<TensorBase<T, B>, TensorError> {
         let shape = shape.into();
         // random vector of size shape.size(), fill with uniform random values
@@ -519,7 +519,7 @@ impl<T: TensorValue + rand::distr::uniform::SampleUniform, B: Backend> RandomTen
         // fill with random values
         let mut rng = rand::rng();
         for v in &mut raw.iter_mut() {
-            *v = rand::Rng::random_range(&mut rng, T::MIN..T::MAX);
+            *v = rand::Rng::random_range(&mut rng, T::from_f32(-1.0)..T::from_f32(1.0));
         }
 
         let backend = B::new();
