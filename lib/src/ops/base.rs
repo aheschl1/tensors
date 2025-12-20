@@ -17,7 +17,7 @@ impl BinaryOpType {
         match self {
             Self::Add => 0,
             Self::Sub => 1,
-            Self::Mul => 2,
+            Self::Mul => 2
         }
     }
 }
@@ -29,7 +29,7 @@ impl BinaryOpType {
         match self {
             Self::Add => a + b,
             Self::Sub => a - b,
-            Self::Mul => a * b,
+            Self::Mul => a * b
         }
     }
 }

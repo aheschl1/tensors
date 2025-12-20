@@ -19,6 +19,7 @@ pub trait TensorValue:
     std::ops::AddAssign +
     std::ops::SubAssign +
     std::ops::MulAssign +
+    std::ops::Div<Output = Self> + 
     'static
 {
     const DTYPE: crate::core::value::DType;
@@ -40,6 +41,7 @@ pub trait TensorValue:
     std::ops::AddAssign +
     std::ops::SubAssign +
     std::ops::MulAssign +
+    std::ops::Div<Output = Self> + 
     'static
 {
     const DTYPE: crate::core::value::DType;
@@ -244,6 +246,13 @@ pub mod types {
     impl From<bool> for boolean {
         fn from(value: bool) -> Self {
             Self(value)
+        }
+    }
+
+    impl std::ops::Div for boolean {
+        type Output = Self;
+        fn div(self, rhs: Self) -> Self::Output {
+            todo!()
         }
     }
 

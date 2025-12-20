@@ -320,6 +320,7 @@ where
         Self::from_buf(min_buf, shape).expect("Failed to allocate memory")
     }
 
+    /// Squeezes the tensor in place, preventing a new allocation from being made.
     pub fn squeeze_in_place(&mut self) {
         let (new_shape, new_strides) = unsafe { compute_squeezed_parameters(self.shape(), self.strides(), None).unwrap_unchecked() };
         self.meta.shape = new_shape;
