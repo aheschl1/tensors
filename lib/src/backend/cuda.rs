@@ -126,9 +126,6 @@ macro_rules! impl_cpu_unary {
     };
 }
 
-
-
-
 impl Backend for Cuda {
     type Buf<T: TensorValue> = CudaBuf<T>;
     
@@ -169,6 +166,41 @@ impl Backend for Cuda {
 
         self.stream()
             .memcpy_htod(src.as_ref(), &mut dst.ptr)
+            .map_err(|e| TensorError::CudaError(e.to_string()))?;
+        Ok(())
+    }
+
+    fn copy_range_within<T: TensorValue>(
+        &self, 
+        buf: &mut Self::Buf<T>, 
+        src: &Self::Buf<T>, 
+        dst_offset: usize, 
+        src_offset: usize, 
+        len: usize
+    ) -> Result<(), TensorError> {
+        self.sync()?;
+        if src_offset + len > src.len {
+            return Err(TensorError::IdxOutOfBounds(format!(
+                "Source range (offset {} + length {}) out of bounds for buffer of length {}",
+                src_offset,
+                len,
+                src.len
+            )));
+        }
+        if dst_offset + len > buf.len {
+            return Err(TensorError::IdxOutOfBounds(format!(
+                "Destination range (offset {} + length {}) out of bounds for buffer of length {}",
+                dst_offset,
+                len,
+                buf.len
+            )));
+        }
+
+        self.stream()
+            .memcpy_dtod(
+                &src.ptr.slice(src_offset..src_offset + len), 
+                &mut buf.ptr.slice_mut(dst_offset..dst_offset + len)
+            )
             .map_err(|e| TensorError::CudaError(e.to_string()))?;
         Ok(())
     }
@@ -1058,7 +1090,7 @@ impl Backend for Cuda {
             _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
         }
     }
-
+    
     // impl_cpu_unary!{ relu, _temp }
     // impl_cpu_unary! { neg, _temp }
     // impl_cpu_unary! { sigmoid, _temp }

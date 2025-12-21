@@ -432,6 +432,10 @@ impl Backend for RemoteBackend {
     fn apply_tanh_contiguous<T:TensorValue>(&self,buf: &mut Self::Buf<T>,start:usize,len:usize) -> Result<(),TensorError>where T:Exp {
         todo!()
     }
+    
+    fn copy_range_within<T: TensorValue>(&self, buf: &mut Self::Buf<T>, src: &Self::Buf<T>, dst_offset: usize, src_offset: usize, len: usize) -> Result<(), TensorError> {
+        todo!()
+    }
 }
 
 impl<T: TensorValue> BackendMatMul<T> for RemoteBackend {
