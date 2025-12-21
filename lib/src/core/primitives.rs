@@ -9,6 +9,11 @@ use crate::core::value::TensorValue;
 use crate::core::{MetaTensor, MetaTensorView, Shape, shape_to_stride};
 use crate::core::tensor::{TensorError, compute_squeezed_parameters};
 
+
+new_key_type! {
+    pub struct TensorId;
+}
+
 /// A generic tensor with backend-specific storage.
 /// 
 /// This is the base type for all tensors, parameterized by element type `T` and backend `B`.
@@ -18,6 +23,7 @@ pub struct TensorBase<T: TensorValue, B: Backend> {
     pub(crate) backend: B,
     pub(crate) buf: B::Buf<T>,
     pub(crate) meta: MetaTensor,
+    pub(crate) id: Option<TensorId>,
     _t: PhantomData<T>,
 }
 
@@ -29,6 +35,7 @@ impl<B: Backend, T: TensorValue> Clone for TensorBase<T, B> {
             backend: new_backend,
             buf: new_buffer,
             meta: self.meta.clone(),
+            id: self.id, // TODO fix this, there needs to be things added to graph context
             _t: PhantomData,
         }
 
@@ -94,6 +101,7 @@ impl<T: TensorValue> RemoteTensor<T> {
             backend: remote_backend,
             buf,
             meta: MetaTensor::new(vec![], vec![], 0),
+            id: None,
             _t: PhantomData,
         })
     }
@@ -111,6 +119,7 @@ where
     pub(crate) buf: &'a B::Buf<T>,
     pub(crate) backend: &'a B,
     pub(crate) meta: MetaTensor,
+    pub(crate) id: Option<TensorId>,
 }
 
 /// A non-owning mutable view over tensor data.
@@ -124,6 +133,7 @@ where
     pub(crate) buf: &'a mut B::Buf<T>,
     pub(crate) backend: &'a B,
     pub(crate) meta: MetaTensor,
+    pub(crate) id: Option<TensorId>,
 }
 
 impl<'a, T, B> TensorView<'a, T, B>
@@ -142,6 +152,7 @@ where
             buf,
             backend,
             meta,
+            id: None,
         }
     }
 }
@@ -161,7 +172,8 @@ where
         Self {
             buf: raw,
             backend,
-            meta
+            meta,
+            id: None,
         }
     }
 }
@@ -189,6 +201,7 @@ where
             backend,
             buf: raw,
             meta,
+            id: None,
             _t: PhantomData,
         }
     }
@@ -228,6 +241,7 @@ where
             backend,
             buf: buffer,
             meta: MetaTensor::new(shape, stride, 0),
+            id: None,
             _t: PhantomData,
         })
     }
@@ -331,6 +345,7 @@ where
 
 #[cfg(feature = "remote")]
 use serde::{Deserialize, Serialize};
+use slotmap::new_key_type;
 
 /// Indicates where a tensor's data resides.
 #[derive(Debug, Clone, PartialEq, Eq)]

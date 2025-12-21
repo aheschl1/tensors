@@ -42,6 +42,19 @@ impl<T, B> AddAssign<T> for TensorBase<T, B>
     }
 }
 
+impl<T, B> AddAssign<T> for &mut TensorBase<T, B> 
+    where T: TensorValue,
+          B: Backend,
+{
+    fn add_assign(&mut self, rhs: T) {
+        self.backend.apply_elementwise_binary(
+            &mut self.buf, 
+            (BinaryOpType::Add, rhs),
+            &self.meta
+        ).unwrap();
+    }
+}
+
 impl<T, B> AddAssign<&T> for TensorBase<T, B> 
     where T: TensorValue,
           B: Backend,
@@ -93,3 +106,4 @@ impl_add!(&TensorView<'a, T, B>);
 impl_add!(TensorView<'a, T, B>);
 impl_add!(&TensorBase<T, B>);
 impl_add!(TensorBase<T, B>);
+impl_add!(&mut TensorBase<T, B>);

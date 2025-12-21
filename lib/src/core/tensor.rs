@@ -120,6 +120,26 @@ impl<T: TensorValue, B: Backend> AsView<T, B> for &TensorBase<T, B> {
     }
 } 
 
+impl<T: TensorValue, B: Backend> AsView<T, B> for &mut TensorBase<T, B> {
+    fn view(&self) -> TensorView<'_, T, B> {
+        TensorView::<T, B>::from_parts(
+            &self.buf, 
+            &self.backend, 
+            self.meta.clone()
+        )
+    }
+    
+    fn view_as(&self, shape: Shape) -> Result<TensorView<'_, T, B>, TensorError> {
+        // collapse into shape
+        if !is_contiguous_relaxed(&self.meta.shape, &self.meta.strides){
+            return Err(TensorError::ContiguityError("Cannot view_as non contiguous tensor".to_string()));
+        }
+
+        panic!()
+    }
+} 
+
+
 impl<T: TensorValue, B: Backend> AsViewMut<T, B> for TensorBase<T, B> {
     fn view_mut(&'_ mut self) -> TensorViewMut<'_, T, B> {
         TensorViewMut::<T, B>::from_parts(
