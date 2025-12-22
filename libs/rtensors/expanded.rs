@@ -62,12 +62,32 @@ pub mod client {
             }
         }
         #[inline(always)]
-        fn from_typeless(buf: TypelessBuf) -> Self {
+        pub(crate) fn from_typeless(buf: TypelessBuf) -> Self {
             Self {
                 id: buf.id,
                 dtype: buf.dtype,
                 _marker: std::marker::PhantomData,
             }
+        }
+    }
+    impl<T: TensorValue> From<&mut RemoteBuf<T>> for TypelessBuf {
+        fn from(buf: &mut RemoteBuf<T>) -> Self {
+            buf.to_typeless()
+        }
+    }
+    impl<T: TensorValue> From<&RemoteBuf<T>> for TypelessBuf {
+        fn from(buf: &RemoteBuf<T>) -> Self {
+            buf.to_typeless()
+        }
+    }
+    impl<T: TensorValue> From<*const RemoteBuf<T>> for TypelessBuf {
+        fn from(buf: *const RemoteBuf<T>) -> Self {
+            unsafe { (&*buf).to_typeless() }
+        }
+    }
+    impl<T: TensorValue> From<*mut RemoteBuf<T>> for TypelessBuf {
+        fn from(buf: *mut RemoteBuf<T>) -> Self {
+            unsafe { (&*buf).to_typeless() }
         }
     }
     struct PendingHandler {
@@ -250,114 +270,42 @@ pub mod client {
             &self,
             src: Box<[T]>,
         ) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
-            let message = Messages::AllocFromSlice {
-                slice: src.into(),
+            let message = RpcMessages::AllocFromSlice {
+                src: src.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::AllocFromSliceResponse { buf } => {
-                        Ok(RemoteBuf::from_typeless(buf?))
-                    }
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn alloc<T: TensorValue>(
             &self,
             len: usize,
         ) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
-            let message = Messages::Alloc {
-                len,
+            let message = RpcMessages::Alloc {
+                len: len.into(),
                 dtype: T::DTYPE,
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::AllocResponse { buf } => Ok(RemoteBuf::from_typeless(buf?)),
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn copy_from_slice<T: TensorValue>(
             &self,
             dst: &mut Self::Buf<T>,
             src: &[T],
         ) -> Result<(), crate::core::tensor::TensorError> {
-            self.pending.sync();
-            let message = Messages::CopyFromSlice {
-                dst: dst.to_typeless(),
-                src: Slice::from_slice(src),
+            let message = RpcMessages::CopyFromSlice {
+                dst: dst.into(),
+                src: src.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::CopyFromSliceResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn read<T: TensorValue>(
             &self,
             buf: &Self::Buf<T>,
             offset: usize,
         ) -> Result<T, crate::core::tensor::TensorError> {
-            self.pending.sync();
-            let message = Messages::Read {
-                buf: buf.to_typeless(),
-                offset,
+            let message = RpcMessages::Read {
+                buf: buf.into(),
+                offset: offset.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ReadResponse { value } => value?.to_value::<T>(),
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn write<T: TensorValue>(
             &self,
@@ -365,100 +313,36 @@ pub mod client {
             offset: usize,
             value: T,
         ) -> Result<(), crate::core::tensor::TensorError> {
-            self.pending.sync();
-            let message = Messages::Write {
-                buf: buf.to_typeless(),
-                offset,
-                value: Value::from_value(value),
+            let message = RpcMessages::Write {
+                buf: buf.into(),
+                offset: offset.into(),
+                value: value.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::WriteResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize {
-            let message = Messages::Len {
-                buf: buf.to_typeless(),
+            let message = RpcMessages::Len {
+                buf: buf.into(),
             };
-            let receiver = self.send_message(message);
-            match receiver.recv() {
-                Ok(Messages::LenResponse { len }) => len,
-                _ => {
-                    ::core::panicking::panic_fmt(
-                        format_args!(
-                            "Failed to get buffer length or unexpected response",
-                        ),
-                    );
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn copy<T: TensorValue>(
             &self,
             src: &Self::Buf<T>,
         ) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
-            self.pending.sync();
-            let message = Messages::Copy {
-                src: src.to_typeless(),
+            let message = RpcMessages::Copy {
+                src: src.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::CopyResponse { buf } => Ok(RemoteBuf::from_typeless(buf?)),
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn dump<T: TensorValue>(
             &self,
             src: &Self::Buf<T>,
         ) -> Result<Box<[T]>, crate::core::tensor::TensorError> {
-            self.pending.sync();
-            let message = Messages::Dump {
-                src: src.to_typeless(),
+            let message = RpcMessages::Dump {
+                src: src.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::DumpResponse { data } => data?.to_boxed_slice::<T>(),
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn broadcast<T: TensorValue>(
             &self,
@@ -467,32 +351,13 @@ pub mod client {
             dst: (*mut Self::Buf<T>, &crate::core::MetaTensor),
             op: crate::ops::base::BinaryOpType,
         ) -> Result<(), crate::core::tensor::TensorError> {
-            let message = unsafe {
-                Messages::Broadcast {
-                    left: ((&*left.0).to_typeless(), left.1.clone()),
-                    right: ((&*right.0).to_typeless(), right.1.clone()),
-                    dst: ((&*dst.0).to_typeless(), dst.1.clone()),
-                    op,
-                }
+            let message = RpcMessages::Broadcast {
+                left: (left.0.into(), left.1.into()),
+                right: (right.0.into(), right.1.into()),
+                dst: (dst.0.into(), dst.1.into()),
+                op: op.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::BroadcastResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_elementwise_binary_contiguous<T: TensorValue>(
             &self,
@@ -501,32 +366,13 @@ pub mod client {
             start: usize,
             len: usize,
         ) -> Result<(), crate::core::tensor::TensorError> {
-            let message = Messages::ApplyElementwiseBinaryContiguous {
-                buf: buf.to_typeless(),
-                op: (op.0, Value::from_value(op.1)),
-                start,
-                len,
+            let message = RpcMessages::ApplyElementwiseBinaryContiguous {
+                buf: buf.into(),
+                op: (op.0.into(), op.1.into()),
+                start: start.into(),
+                len: len.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyElementwiseBinaryContiguousResponse { result } => {
-                        result
-                    }
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_elementwise_binary_1d_strided<T: TensorValue>(
             &self,
@@ -536,33 +382,14 @@ pub mod client {
             stride: isize,
             len: usize,
         ) -> Result<(), crate::core::tensor::TensorError> {
-            let message = Messages::ApplyElementwiseBinary1DStrided {
-                buf: buf.to_typeless(),
-                op: (op.0, Value::from_value(op.1)),
-                offset,
-                stride,
-                len,
+            let message = RpcMessages::ApplyElementwiseBinary1dStrided {
+                buf: buf.into(),
+                op: (op.0.into(), op.1.into()),
+                offset: offset.into(),
+                stride: stride.into(),
+                len: len.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyElementwiseBinary1DStridedResponse { result } => {
-                        result
-                    }
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_elementwise_binary_nd<T: TensorValue>(
             &self,
@@ -572,31 +399,14 @@ pub mod client {
             shape: &[usize],
             stride: &[isize],
         ) -> Result<(), TensorError> {
-            let message = Messages::ApplyElementwiseBinaryND {
-                buf: buf.to_typeless(),
-                op: (op.0, Value::from_value(op.1)),
-                offset,
-                shape: shape.to_vec(),
-                stride: stride.to_vec(),
+            let message = RpcMessages::ApplyElementwiseBinaryNd {
+                buf: buf.into(),
+                op: (op.0.into(), op.1.into()),
+                offset: offset.into(),
+                shape: shape.into(),
+                stride: stride.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyElementwiseBinaryNDResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_neg_contiguous<T: TensorValue>(
             &self,
@@ -604,29 +414,12 @@ pub mod client {
             start: usize,
             len: usize,
         ) -> Result<(), TensorError> {
-            let message = Messages::ApplyNegContiguous {
-                buf: buf.to_typeless(),
-                start,
-                len,
+            let message = RpcMessages::ApplyNegContiguous {
+                buf: buf.into(),
+                start: start.into(),
+                len: len.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyNegContiguousResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_neg_1d_strided<T: TensorValue>(
             &self,
@@ -635,30 +428,13 @@ pub mod client {
             stride: isize,
             len: usize,
         ) -> Result<(), TensorError> {
-            let message = Messages::ApplyNeg1DStrided {
-                buf: buf.to_typeless(),
-                offset,
-                stride,
-                len,
+            let message = RpcMessages::ApplyNeg1dStrided {
+                buf: buf.into(),
+                offset: offset.into(),
+                stride: stride.into(),
+                len: len.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyNeg1DStridedResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_neg_nd<T: TensorValue>(
             &self,
@@ -667,30 +443,13 @@ pub mod client {
             shape: &[usize],
             stride: &[isize],
         ) -> Result<(), TensorError> {
-            let message = Messages::ApplyNegND {
-                buf: buf.to_typeless(),
-                offset,
-                shape: shape.to_vec(),
-                stride: stride.to_vec(),
+            let message = RpcMessages::ApplyNegNd {
+                buf: buf.into(),
+                offset: offset.into(),
+                shape: shape.into(),
+                stride: stride.into(),
             };
-            {
-                let receiver = self.send_message(message);
-                let response = receiver
-                    .recv()
-                    .map_err(|_| TensorError::BackendError(
-                        "Failed to receive response".to_string(),
-                    ))?;
-                match response {
-                    Messages::ApplyNegNDResponse { result } => result,
-                    _ => {
-                        Err(
-                            TensorError::BackendError(
-                                "Unexpected response type".to_string(),
-                            ),
-                        )
-                    }
-                }
-            }
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_relu_nd<T: TensorValue>(
             &self,
@@ -699,7 +458,13 @@ pub mod client {
             shape: &[usize],
             stride: &[isize],
         ) -> Result<(), TensorError> {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyReluNd {
+                buf: buf.into(),
+                offset: offset.into(),
+                shape: shape.into(),
+                stride: stride.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_relu_1d_strided<T: TensorValue>(
             &self,
@@ -708,7 +473,13 @@ pub mod client {
             stride: isize,
             len: usize,
         ) -> Result<(), TensorError> {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyRelu1dStrided {
+                buf: buf.into(),
+                offset: offset.into(),
+                stride: stride.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_relu_contiguous<T: TensorValue>(
             &self,
@@ -716,7 +487,12 @@ pub mod client {
             start: usize,
             len: usize,
         ) -> Result<(), TensorError> {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyReluContiguous {
+                buf: buf.into(),
+                start: start.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_sigmoid_nd<T: TensorValue>(
             &self,
@@ -728,7 +504,13 @@ pub mod client {
         where
             T: InvExp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplySigmoidNd {
+                buf: buf.into(),
+                offset: offset.into(),
+                shape: shape.into(),
+                stride: stride.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_sigmoid_1d_strided<T: TensorValue>(
             &self,
@@ -740,7 +522,13 @@ pub mod client {
         where
             T: InvExp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplySigmoid1dStrided {
+                buf: buf.into(),
+                offset: offset.into(),
+                stride: stride.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_sigmoid_contiguous<T: TensorValue>(
             &self,
@@ -751,7 +539,12 @@ pub mod client {
         where
             T: InvExp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplySigmoidContiguous {
+                buf: buf.into(),
+                start: start.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_tanh_nd<T: TensorValue>(
             &self,
@@ -763,7 +556,13 @@ pub mod client {
         where
             T: Exp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyTanhNd {
+                buf: buf.into(),
+                offset: offset.into(),
+                shape: shape.into(),
+                stride: stride.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_tanh_1d_strided<T: TensorValue>(
             &self,
@@ -775,7 +574,13 @@ pub mod client {
         where
             T: Exp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyTanh1dStrided {
+                buf: buf.into(),
+                offset: offset.into(),
+                stride: stride.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
         fn apply_tanh_contiguous<T: TensorValue>(
             &self,
@@ -786,7 +591,12 @@ pub mod client {
         where
             T: Exp,
         {
-            ::core::panicking::panic("not yet implemented")
+            let message = RpcMessages::ApplyTanhContiguous {
+                buf: buf.into(),
+                start: start.into(),
+                len: len.into(),
+            };
+            ::core::panicking::panic("explicit panic")
         }
     }
     enum RpcMessages {

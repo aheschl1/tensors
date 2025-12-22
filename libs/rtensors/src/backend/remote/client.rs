@@ -21,7 +21,7 @@ impl<T: TensorValue> RemoteBuf<T> {
     }
 
     #[inline(always)]
-    fn from_typeless(buf: TypelessBuf) -> Self {
+    pub(crate) fn from_typeless(buf: TypelessBuf) -> Self {
         Self {
             id: buf.id,
             dtype: buf.dtype,
@@ -30,6 +30,29 @@ impl<T: TensorValue> RemoteBuf<T> {
     }
 }
 
+impl<T: TensorValue> From<&mut RemoteBuf<T>> for TypelessBuf {
+    fn from(buf: &mut RemoteBuf<T>) -> Self {
+        buf.to_typeless()
+    }
+}
+
+impl<T: TensorValue> From<&RemoteBuf<T>> for TypelessBuf {
+    fn from(buf: &RemoteBuf<T>) -> Self {
+        buf.to_typeless()
+    }
+}
+
+impl<T: TensorValue> From<*const RemoteBuf<T>> for TypelessBuf {
+    fn from(buf: *const RemoteBuf<T>) -> Self {
+        unsafe { (&*buf).to_typeless() }
+    }
+}
+
+impl<T: TensorValue> From<*mut RemoteBuf<T>> for TypelessBuf {
+    fn from(buf: *mut RemoteBuf<T>) -> Self {
+        unsafe { (&*buf).to_typeless() }
+    }
+}
 
 #[derive(Debug)]
 struct PendingHandler {
@@ -114,7 +137,8 @@ impl RemoteBackend {
         self.poisoned.load(Ordering::SeqCst)
     }
 
-    fn send_message(&self, msg: Messages) -> flume::Receiver<Messages>{
+    // #[rpc_proc::send_message]
+    fn send_message(&self, msg: Messages) -> flume::Receiver<_>{
         if self.is_poisoned() {
             panic!("Attempted to send message on poisoned RemoteBackend. Reasons for poison:
             1. An asynchronous operation reported an error from the remote backend.
@@ -176,12 +200,6 @@ macro_rules! send_recv {
     }};
 }
 
-macro_rules! make_op {
-    ($op:expr, $value:expr) => {
-        ($op, Value::from_value($value))
-    };
-}
-
 #[rpc_proc::rpc(
     Box<[T]> = Slice,
     &T = Slice,
@@ -228,54 +246,54 @@ impl Backend for RemoteBackend {
             slice: src.into(),
         };
         send_recv!(self, message, Messages::AllocFromSliceResponse { buf } => {
-            Ok(RemoteBuf::from_typeless(buf?))
+            buf?.into()
         })
     }
 
     #[rpc(extra(dtype: DType = T::DTYPE))]
     fn alloc<T: TensorValue>(&self, len: usize) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
         let message = Messages::Alloc {
-            len,
+            len: len.into(),
             dtype: T::DTYPE,
         };
         send_recv!(self, message, Messages::AllocResponse { buf } => {
-            Ok(RemoteBuf::from_typeless(buf?))
+            buf?.into()
         })
     }
 
     fn copy_from_slice<T: TensorValue>(&self, dst: &mut Self::Buf<T>, src: &[T]) -> Result<(), crate::core::tensor::TensorError> {
         self.pending.sync();
         let message = Messages::CopyFromSlice {
-            dst: dst.to_typeless(),
-            src: Slice::from_slice(src),
+            dst: dst.into(),
+            src: src.into(),
         };
-        send_recv!(self, message, Messages::CopyFromSliceResponse { result } => result)
+        send_recv!(self, message, Messages::CopyFromSliceResponse { result } => {result?.into()})
     }
 
     fn read<T: TensorValue>(&self, buf: &Self::Buf<T>, offset: usize) -> Result<T, crate::core::tensor::TensorError> {
         self.pending.sync();
         let message = Messages::Read {
-            buf: buf.to_typeless(),
-            offset,
+            buf: buf.into(),
+            offset: offset.into(),
         };
         send_recv!(self, message, Messages::ReadResponse { value } => {
-            value?.to_value::<T>()
+            value?.into()
         })
     }
 
     fn write<T: TensorValue>(&self, buf: &mut Self::Buf<T>, offset: usize, value: T) -> Result<(), crate::core::tensor::TensorError> {
         self.pending.sync();
         let message = Messages::Write {
-            buf: buf.to_typeless(),
-            offset,
-            value: Value::from_value(value),
+            buf: buf.into(),
+            offset: offset.into(),
+            value: value.into(),
         };
-        send_recv!(self, message, Messages::WriteResponse { result } => result)
+        send_recv!(self, message, Messages::WriteResponse { result } => {result?.into()})
     }
 
     fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize {
         let message = Messages::Len {
-            buf: buf.to_typeless(),
+            buf: buf.into(),
         };
         let receiver = self.send_message(message);
         match receiver.recv() {
@@ -287,20 +305,20 @@ impl Backend for RemoteBackend {
     fn copy<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Self::Buf<T>, crate::core::tensor::TensorError> {
         self.pending.sync();
         let message = Messages::Copy {
-            src: src.to_typeless(),
+            src: src.into(),
         };
         send_recv!(self, message, Messages::CopyResponse { buf } => {
-            Ok(RemoteBuf::from_typeless(buf?))
+            buf?.into()
         })
     }
 
     fn dump<T: TensorValue>(&self, src: &Self::Buf<T>) -> Result<Box<[T]>, crate::core::tensor::TensorError> {
         self.pending.sync();
         let message = Messages::Dump {
-            src: src.to_typeless(),
+            src: src.into(),
         };
         send_recv!(self, message, Messages::DumpResponse { data } => {
-            data?.to_boxed_slice::<T>()
+            data?.into()
         })
     }
 
@@ -311,30 +329,29 @@ impl Backend for RemoteBackend {
         dst: (*mut Self::Buf<T>, &crate::core::MetaTensor),
         op: crate::ops::base::BinaryOpType
     ) -> Result<(), crate::core::tensor::TensorError> {
-        let message = unsafe {            
-            Messages::Broadcast {
-                left: ((&*left.0).to_typeless(), left.1.clone()),
-                right: ((&*right.0).to_typeless(), right.1.clone()),
-                dst: ((&*dst.0).to_typeless(), dst.1.clone()),
-                op,
-            }
+        let message = Messages::Broadcast {
+            left: (left.0.into(), left.1.into()),
+            right: (right.0.into(), right.1.into()),
+            dst: (dst.0.into(), dst.1.into()),
+            op: op.into(),
         };
-        send_recv!(self, message, Messages::BroadcastResponse { result } => result)
+        send_recv!(self, message, Messages::BroadcastResponse { result } => {result?.into()})
     }
 
     fn apply_elementwise_binary_contiguous<T: TensorValue>(
-        &self, buf: &mut Self::Buf<T>, 
+        &self, 
+        buf: &mut Self::Buf<T>, 
         op: (crate::ops::base::BinaryOpType, T), 
         start: usize,
         len: usize
     ) -> Result<(), crate::core::tensor::TensorError> {
         let message = Messages::ApplyElementwiseBinaryContiguous {
-            buf: buf.to_typeless(),
-            op: make_op!(op.0, op.1),
-            start,
-            len,
+            buf: buf.into(),
+            op: (op.0.into(), op.1.into()),
+            start: start.into(),
+            len: len.into(),
         };
-        send_recv!(self, message, Messages::ApplyElementwiseBinaryContiguousResponse { result } => result)
+        send_recv!(self, message, Messages::ApplyElementwiseBinaryContiguousResponse { result } => {result?.into()})
     }
 
     fn apply_elementwise_binary_1d_strided<T: TensorValue>(
@@ -345,13 +362,13 @@ impl Backend for RemoteBackend {
         len: usize
     ) -> Result<(), crate::core::tensor::TensorError> {
         let message = Messages::ApplyElementwiseBinary1DStrided {
-            buf: buf.to_typeless(),
-            op: make_op!(op.0, op.1),
-            offset,
-            stride,
-            len,
+            buf: buf.into(),
+            op: (op.0.into(), op.1.into()),
+            offset: offset.into(),
+            stride: stride.into(),
+            len: len.into(),
         };
-        send_recv!(self, message, Messages::ApplyElementwiseBinary1DStridedResponse { result } => result)
+        send_recv!(self, message, Messages::ApplyElementwiseBinary1DStridedResponse { result } => {result?.into()})
     }
     
     fn apply_elementwise_binary_nd<T: TensorValue>(
@@ -363,13 +380,13 @@ impl Backend for RemoteBackend {
         stride: &[isize],
     ) -> Result<(), TensorError> {
         let message = Messages::ApplyElementwiseBinaryND {
-            buf: buf.to_typeless(),
-            op: make_op!(op.0, op.1),
-            offset,
-            shape: shape.to_vec(),
-            stride: stride.to_vec(),
+            buf: buf.into(),
+            op: (op.0.into(), op.1.into()),
+            offset: offset.into(),
+            shape: shape.into(),
+            stride: stride.into(),
         };
-        send_recv!(self, message, Messages::ApplyElementwiseBinaryNDResponse { result } => result)
+        send_recv!(self, message, Messages::ApplyElementwiseBinaryNDResponse { result } => {result?.into()})
     }
     
     fn apply_neg_contiguous<T: TensorValue>(
@@ -378,10 +395,10 @@ impl Backend for RemoteBackend {
         len: usize
     ) -> Result<(), TensorError> {
         // async jon
-        let message = Messages::ApplyNegContiguous {
-            buf: buf.to_typeless(),
-            start,
-            len,
+        let message: Messages = Messages::ApplyNegContiguous {
+            buf: buf.into(),
+            start: start.into(),
+            len: len.into(),
         };
         send_recv!(self, message, Messages::ApplyNegContiguousResponse { result } => result)
     }
@@ -393,12 +410,12 @@ impl Backend for RemoteBackend {
         len: usize
     ) -> Result<(), TensorError> {
         let message = Messages::ApplyNeg1DStrided {
-            buf: buf.to_typeless(),
-            offset,
-            stride,
-            len,
+            buf: buf.into(),
+            offset: offset.into(),
+            stride: stride.into(),
+            len: len.into(),
         };
-        send_recv!(self, message, Messages::ApplyNeg1DStridedResponse { result } => result)
+        send_recv!(self, message, Messages::ApplyNeg1DStridedResponse { result } => {result?.into()})
     }
     
     fn apply_neg_nd<T: TensorValue>(
@@ -409,12 +426,12 @@ impl Backend for RemoteBackend {
         stride: &[isize],
     ) -> Result<(), TensorError> {
         let message = Messages::ApplyNegND {
-            buf: buf.to_typeless(),
-            offset,
-            shape: shape.to_vec(),
-            stride: stride.to_vec(),
+            buf: buf.into(),
+            offset: offset.into(),
+            shape: shape.into(),
+            stride: stride.into(),
         };
-        send_recv!(self, message, Messages::ApplyNegNDResponse { result } => result)
+        send_recv!(self, message, Messages::ApplyNegNDResponse { result } => {result?.into()})
     }
     
     fn apply_relu_nd<T:TensorValue>(&self,buf: &mut Self::Buf<T>,offset:usize,shape: &[usize],stride: &[isize],) -> Result<(),TensorError>  {

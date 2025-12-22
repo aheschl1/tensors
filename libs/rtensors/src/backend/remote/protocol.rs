@@ -9,6 +9,12 @@ pub(crate) struct Slice {
     pub(crate) dtype: DType,
 }
 
+impl<T: TensorValue> Into<Result<Box<[T]>, TensorError>> for Slice {
+    fn into(self) -> Result<Box<[T]>, TensorError> {
+        self.to_boxed_slice::<T>()
+    }
+}
+
 impl Slice {
     #[inline(always)]
     pub(crate) fn from_boxed_slice<T: TensorValue>(boxed: Box<[T]>) -> Self {
@@ -60,10 +66,24 @@ impl<T: TensorValue> From<Box<[T]>> for Slice {
     }
 }
 
+
+impl<T: TensorValue> From<&[T]> for Slice {
+    fn from(slice: &[T]) -> Self {
+        Slice::from_slice(slice)
+    }
+}
+
+
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Value {
     data: Vec<u8>, // bytes
     dtype: DType,
+}
+
+impl<T: TensorValue> Into<Result<T, TensorError>> for Value {
+    fn into(self) -> Result<T, TensorError> {
+        self.to_value::<T>()
+    }
 }
 
 impl Value {
@@ -97,11 +117,24 @@ impl Value {
     }
 }
 
+impl<T: TensorValue> From<T> for Value {
+    fn from(value: T) -> Self {
+        Value::from_value(value)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub(crate) struct TypelessBuf {
     pub(crate) id: u32,
     pub(crate) dtype: DType,
 }
+
+impl<T: TensorValue> Into<Result<RemoteBuf<T>, TensorError>> for TypelessBuf {
+    fn into(self) -> Result<RemoteBuf<T>, TensorError> {
+        Ok(RemoteBuf::from_typeless(self))
+    }
+}
+
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Response {
