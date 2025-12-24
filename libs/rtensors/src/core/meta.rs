@@ -1,4 +1,4 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 
 use crate::{backend::Backend, core::{primitives::TensorBase, value::TensorValue, TensorViewMut}};
 
@@ -218,6 +218,56 @@ impl MetaTensor {
     pub fn iter_coords(&self) -> impl Iterator<Item = Vec<usize>> + '_ {
         CoordIter::new(self.shape.as_slice())
     }
+
+    /// Returns a vector of ranges representing contiguous memory blocks.
+    /// The complexity is O(blocks) where blocks is the number of contiguous blocks.
+    /// So, contiguous tensors return a single range in O(1) time.
+    /// A matrix with three contiguous rows not sitting contiguously would return three ranges in O(3) time.
+    pub fn iter_contiguous_ranges(&self) -> Vec<Range<usize>> {
+        let k = contiguous_suffix_len(&self.shape, &self.strides);
+        if k == 0 {
+            return self.iter_offsets().map(|o| o..o+1).collect();
+        }
+        let block_elems: usize = self.shape
+            .iter()
+            .rev()
+            .take(k)
+            .product();
+        let n_blocks: usize = self.shape
+            .iter()
+            .take(self.shape.len() - k)
+            .product();
+
+        let mut ranges = Vec::with_capacity(n_blocks);
+
+        let base = self.offset as isize;
+        let outer_shape = &self.shape.as_slice()[..self.shape.len() - k];
+        let outer_strides = &self.strides.as_slice()[..self.strides.len() - k];
+
+        let mut idx = vec![0usize; outer_shape.len()];
+
+        for _ in 0..n_blocks {
+            let mut off = base;
+            for (i, s) in idx.iter().zip(outer_strides) {
+                off += *i as isize * *s;
+            }
+
+            let start = off as usize;
+            ranges.push(start..start + block_elems);
+
+            // increment outer index
+            for d in (0..idx.len()).rev() {
+                idx[d] += 1;
+                if idx[d] < outer_shape[d] {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+
+        ranges
+
+    }
     
     /// Returns the offset for the i-th element in row-major order.
     pub fn ith_offset(&self, i: usize) -> usize {
@@ -376,6 +426,23 @@ pub fn shape_to_stride(shape: &Shape) -> Strides {
     Strides(stride)
 }
 
+#[inline(always)]
+fn contiguous_suffix_len(shape: &Shape, strides: &Strides) -> usize {
+    let mut expected = 1isize;
+    let mut k = 0;
+
+    for i in (0..shape.len()).rev() {
+        if shape[i] <= 1 {
+            continue;
+        }
+        if strides[i] != expected {
+            break;
+        }
+        expected *= shape[i] as isize;
+        k += 1;
+    }
+    k
+}
 
 /// Checks whether a layout (shape/stride) is contiguous in a relaxed sense:
 /// ignores singleton dimensions and accepts empty shapes.

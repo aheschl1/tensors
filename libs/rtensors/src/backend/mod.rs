@@ -147,6 +147,7 @@ pub trait Backend: Send + Sync + 'static + Clone {
     fn alloc_from_slice<T: TensorValue>(&self, src: Box<[T]>) -> Result<Self::Buf<T>, TensorError>;
     fn alloc<T: TensorValue>(&self, len: usize) -> Result<Self::Buf<T>, TensorError>;
     fn copy_from_slice<T: TensorValue>(&self, dst: &mut Self::Buf<T>, src: &[T]) -> Result<(), TensorError>;
+    fn copy_range_within<T: TensorValue>(&self, dst: &mut Self::Buf<T>, src: &Self::Buf<T>, dst_offset: usize, src_offset: usize, len: usize) -> Result<(), TensorError>;
     fn read<T: TensorValue>(&self, buf: &Self::Buf<T>, offset: usize) -> Result<T, TensorError>;
     fn write<T: TensorValue>(&self, buf: &mut Self::Buf<T>, offset: usize, value: T) -> Result<(), TensorError>;
     fn len<T: TensorValue>(&self, buf: &Self::Buf<T>) -> usize;

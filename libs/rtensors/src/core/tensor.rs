@@ -225,11 +225,17 @@ fn view_to_contiguous<T: TensorValue, B: Backend>(meta: &MetaTensor, raw: &B::Bu
     // Copy element by element from the view to the new contiguous buffer
     // The view might be non-contiguous (e.g., a column slice), so we iterate
     // through all logical positions and copy to sequential positions in the new buffer
-    for (new_idx, old_offset) in meta.iter_offsets().enumerate() {
-        let value = backend.read(raw, old_offset)?;
-        new_backend.write(&mut new_buf, new_idx, value)?;
-    }
+    // for (new_idx, old_offset) in meta.iter_offsets().enumerate() {
+    //     new_backend.copy_range_within(&mut new_buf, raw, new_idx, old_offset, 1)?
+    // }
     
+    let mut new_idx = 0;
+    for range in meta.iter_contiguous_ranges() {
+        let len = range.end - range.start;
+        new_backend.copy_range_within(&mut new_buf, raw, new_idx, range.start, len)?;
+        new_idx += len;
+    }
+
     // Create a new tensor with contiguous layout (standard row-major stride)
     let new_shape = meta.shape().clone();
     let new_stride = super::shape_to_stride(&new_shape);

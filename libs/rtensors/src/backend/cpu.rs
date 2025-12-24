@@ -111,6 +111,27 @@ impl Backend for Cpu {
         Ok(())
     }
 
+    fn copy_range_within<T: TensorValue>(
+        &self, 
+        dst: &mut Self::Buf<T>, 
+        src: &Self::Buf<T>, 
+        dst_offset: usize, 
+        src_offset: usize, 
+        len: usize
+    ) -> Result<(), TensorError> {
+        if dst_offset + len > dst.len() || src_offset + len > src.len() {
+            return Err(TensorError::IdxOutOfBounds(format!(
+                "Index out of bounds in copy_range_within: dst size {}, src size {}, dst_offset {}, src_offset {}, len {}",
+                dst.len(),
+                src.len(),
+                dst_offset,
+                src_offset,
+                len
+            )));
+        }
+        dst[dst_offset..dst_offset + len].copy_from_slice(&src[src_offset..src_offset + len]);
+        Ok(())
+    }
 
     fn read<T: TensorValue>(&self, buf: &Self::Buf<T>, offset: usize) -> Result<T, TensorError> {
         Ok(*buf.get(offset).ok_or(
