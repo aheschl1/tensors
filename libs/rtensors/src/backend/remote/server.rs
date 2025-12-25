@@ -659,106 +659,107 @@ pub (crate) struct AsyncJob {
 }
 
 
+macro_rules! async_job {
+    (ack: $message_type:ident, task_id: $task_id: expr, connection: $connection:ident, job: $job_type:ident, $($args:tt)*)  => {
+        let response = Response {
+            asynchronous: true,
+            complete: false,
+            task_id: $task_id,
+            error: None,
+            message: Messages::$message_type(Ok(())),
+        };
+        $connection.queue_response(response).expect("Failed to send message");
+
+        let job = AsyncJob {
+            task_id: $task_id,
+            job: Messages::$job_type {
+                $($args)*
+            }
+        };
+        $connection.queue_job(job).expect("Failed to queue job");
+    }; 
+}
+
+macro_rules! sync_job {
+    ($message:expr, task_id: $task_id: expr, connection: $connection:ident, err: $error:expr) => {
+        let response = Response {
+            asynchronous: false,
+            complete: true,
+            task_id: $task_id,
+            error: $error,
+            message: $message
+        };
+        $connection.queue_response(response).expect("Failed to send message");
+    };
+}
+
+
 #[inline(always)]
 fn handle_request(
     request: Request, 
     connection: &ClientConnection,
 ){ 
-    macro_rules! async_job {
-        (ack: $message_type:ident, job: $job_type:ident, $($args:tt)*)  => {
-            let response = Response {
-                asynchronous: true,
-                complete: false,
-                task_id: request.task_id,
-                error: None,
-                message: Messages::$message_type(Ok(())),
-            };
-            connection.queue_response(response).expect("Failed to send message");
-
-            let job = AsyncJob {
-                task_id: request.task_id,
-                job: Messages::$job_type {
-                    $($args)*
-                }
-            };
-            connection.queue_job(job).expect("Failed to queue job");
-        };
-    }
-
-    macro_rules! sync_job {
-        ($message:expr, err: $error:expr) => {
-            let response = Response {
-                asynchronous: false,
-                complete: true,
-                task_id: request.task_id,
-                error: $error,
-                message: $message
-            };
-            connection.queue_response(response).expect("Failed to send message");
-        };
-    }
-
     match request.message {
         Messages::DeviceType => {
-            sync_job!(Messages::DeviceTypeResponse { device_type: select_buffer(connection) }, err: None);
+            sync_job!(Messages::DeviceTypeResponse { device_type: select_buffer(connection) }, task_id: request.task_id, connection: connection, err: None);
         }
         Messages::AllocFromSlice { src } => {
             let remote_buf = dispatch_alloc_from_slice(src, connection);
-            sync_job!(Messages::AllocFromSliceResponse (remote_buf), err: remote_buf.as_ref().err().cloned());
+            sync_job!(Messages::AllocFromSliceResponse (remote_buf), task_id: request.task_id, connection: connection, err: remote_buf.as_ref().err().cloned());
         },
         Messages::Alloc { len, dtype } => {
             let remote_buf = dispatch_alloc(len, dtype, connection);
-            sync_job!(Messages::AllocResponse (remote_buf), err: remote_buf.as_ref().err().cloned());
+            sync_job!(Messages::AllocResponse (remote_buf), task_id: request.task_id, connection: connection, err: remote_buf.as_ref().err().cloned());
         },
         Messages::CopyFromSlice { dst, src } => {
-            async_job!(ack: CopyFromSliceResponse, job: CopyFromSlice, dst, src);
+            async_job!(ack: CopyFromSliceResponse, task_id: request.task_id, connection: connection, job: CopyFromSlice, dst, src);
         },
         Messages::Read { buf, offset } => {
             let value = dispatch_read(buf, offset, connection);
-            sync_job!(Messages::ReadResponse (value), err: value.as_ref().err().cloned());
+            sync_job!(Messages::ReadResponse (value), task_id: request.task_id, connection: connection, err: value.as_ref().err().cloned());
         }
         Messages::Write { buf, offset, value } => {
             let result = dispatch_write(buf, offset, value, connection);
-            sync_job!(Messages::WriteResponse (result), err: result.as_ref().err().cloned());
+            sync_job!(Messages::WriteResponse (result), task_id: request.task_id, connection: connection, err: result.as_ref().err().cloned());
         }
         Messages::Len { buf } => {
             let len = dispatch_len(buf, connection);
-            sync_job!(Messages::LenResponse (len.unwrap_or(0)), err: len.as_ref().err().cloned());
+            sync_job!(Messages::LenResponse (len.unwrap_or(0)), task_id: request.task_id, connection: connection, err: len.as_ref().err().cloned());
         }
         Messages::Copy { src } => {
             let new_buf = dispatch_copy(src, connection);
-            sync_job!(Messages::CopyResponse (new_buf), err: new_buf.as_ref().err().cloned());
+            sync_job!(Messages::CopyResponse (new_buf), task_id: request.task_id, connection: connection, err: new_buf.as_ref().err().cloned());
         }
         Messages::Dump { src } => {
             let slice = dispatch_dump(src, connection);
-            sync_job!(Messages::DumpResponse (slice), err: slice.as_ref().err().cloned());
+            sync_job!(Messages::DumpResponse (slice), task_id: request.task_id, connection: connection, err: slice.as_ref().err().cloned());
         }
         Messages::ApplyElementwiseBinaryContiguous { buf, op, start, len } => {
-            async_job!(ack: ApplyElementwiseBinaryContiguousResponse, job: ApplyElementwiseBinaryContiguous, buf, op, start, len);
+            async_job!(ack: ApplyElementwiseBinaryContiguousResponse, task_id: request.task_id, connection: connection, job: ApplyElementwiseBinaryContiguous, buf, op, start, len);
         }
         Messages::ApplyElementwiseBinary1dStrided { buf, op, offset, stride, len } => {
-            async_job!(ack: ApplyElementwiseBinary1dStridedResponse, job: ApplyElementwiseBinary1dStrided, buf, op, offset, stride, len);
+            async_job!(ack: ApplyElementwiseBinary1dStridedResponse, task_id: request.task_id, connection: connection, job: ApplyElementwiseBinary1dStrided, buf, op, offset, stride, len);
         }
         Messages::ApplyElementwiseBinaryNd { buf, op, offset, shape, stride } => {
-            async_job!(ack: ApplyElementwiseBinaryNdResponse, job: ApplyElementwiseBinaryNd, buf, op, offset, shape, stride);
+            async_job!(ack: ApplyElementwiseBinaryNdResponse, task_id: request.task_id, connection: connection, job: ApplyElementwiseBinaryNd, buf, op, offset, shape, stride);
         }
         Messages::Broadcast { left, right, dst, op } => { 
-            async_job!(ack: BroadcastResponse, job: Broadcast, left, right, dst, op);    
+            async_job!(ack: BroadcastResponse, task_id: request.task_id, connection: connection, job: Broadcast, left, right, dst, op);    
         }
         Messages::Matmul { lhs, rhs, dst, b, m, k, n, contiguity } => {
-            async_job!(ack: MatmulResponse, job: Matmul, lhs, rhs, dst, b, m, k, n, contiguity);
+            async_job!(ack: MatmulResponse, task_id: request.task_id, connection: connection, job: Matmul, lhs, rhs, dst, b, m, k, n, contiguity);
         }
         Messages::ApplyNegContiguous { buf, start, len } => {
-            async_job!(ack: ApplyNegContiguousResponse, job: ApplyNegContiguous, buf, start, len);
+            async_job!(ack: ApplyNegContiguousResponse, task_id: request.task_id, connection: connection, job: ApplyNegContiguous, buf, start, len);
         }
         Messages::ApplyNeg1dStrided { buf, offset, stride, len } => {
-            async_job!(ack: ApplyNeg1dStridedResponse, job: ApplyNeg1dStrided, buf, offset, stride, len);
+            async_job!(ack: ApplyNeg1dStridedResponse, task_id: request.task_id, connection: connection, job: ApplyNeg1dStrided, buf, offset, stride, len);
         }
         Messages::ApplyNegNd { buf, offset, shape, stride } => {
-            async_job!(ack: ApplyNegNdResponse, job: ApplyNegNd, buf, offset, shape, stride);
+            async_job!(ack: ApplyNegNdResponse, task_id: request.task_id, connection: connection, job: ApplyNegNd, buf, offset, shape, stride);
         }
         Messages::CopyRangeWithin { dst, src, dst_offset, src_offset, len } => {
-            async_job!(ack: CopyRangeWithinResponse, job: CopyRangeWithin, dst, src, dst_offset, src_offset, len);
+            async_job!(ack: CopyRangeWithinResponse, task_id: request.task_id, connection: connection, job: CopyRangeWithin, dst, src, dst_offset, src_offset, len);
         }
 
         Messages::ApplyReluNd { buf, offset, shape, stride } => todo!(),
@@ -801,7 +802,7 @@ fn handle_request(
         Messages::CopyRangeWithinResponse { .. } |
         Messages::ApplyNegContiguousResponse { .. } => {
             sync_job!(Messages::ErrorResponse { 
-                message: "Unsupported request".to_string() }, err: Some(TensorError::RemoteError("Unsupported request".to_string()))
+                message: "Unsupported request".to_string() }, task_id: request.task_id, connection: connection, err: Some(TensorError::RemoteError("Unsupported request".to_string()))
             );
         }
     }
@@ -883,72 +884,53 @@ fn drain_background_jobs(connection: ClientConnection) {
                 break;
             }
         };
-        let task_id = job.task_id;
 
-        let (message, error) = match job.job {
+        match job.job {
             Messages::CopyFromSlice { dst, src, .. } => {
                 let result = dispatch_copy_from_slice(dst, src, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::CopyFromSliceResponse(result), err)
+                sync_job!(Messages::CopyFromSliceResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyElementwiseBinaryContiguous { buf, op, start, len, .. } => {
                 let (op_type, value) = op;
                 let result = dispatch_apply_binary_elementwise_contiguous(buf, op_type, value, start, len, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyElementwiseBinaryContiguousResponse ( result ), err)
+                sync_job!(Messages::ApplyElementwiseBinaryContiguousResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyElementwiseBinary1dStrided { buf, op, offset, stride, len, .. } => {
                 let (op_type, value) = op;
                 let result = dispatch_apply_binary_elementwise_1d_strided(buf, op_type, value, offset, stride, len, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyElementwiseBinary1dStridedResponse ( result ), err)
+                sync_job!(Messages::ApplyElementwiseBinary1dStridedResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyElementwiseBinaryNd { buf, op, offset, shape, stride, .. } => {
                 let (op_type, value) = op;
                 let result = dispatch_apply_binary_elementwise_nd(buf, op_type, value, offset, &shape, &stride, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyElementwiseBinaryNdResponse ( result ), err)
+                sync_job!(Messages::ApplyElementwiseBinaryNdResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyNegContiguous { buf, start, len, .. } => {
                 let result = dispatch_apply_neg_contiguous(buf, start, len, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyNegContiguousResponse ( result ), err)
+                sync_job!(Messages::ApplyNegContiguousResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyNeg1dStrided { buf, offset, stride, len, .. } => {
                 let result = dispatch_apply_neg_1d_strided(buf, offset, stride, len, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyNeg1dStridedResponse ( result ), err)
+                sync_job!(Messages::ApplyNeg1dStridedResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::ApplyNegNd { buf, offset, shape, stride, .. } => {
                 let result = dispatch_apply_neg_nd(buf, offset, &shape, &stride, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::ApplyNegNdResponse ( result ), err)
+                sync_job!(Messages::ApplyNegNdResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::Broadcast { left, right, dst, op, .. } => {
                 let result = dispatch_broadcast(left, right, dst, op, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::BroadcastResponse ( result ), err)
+                sync_job!(Messages::BroadcastResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned()); 
             },
             Messages::Matmul { lhs, rhs, dst, b, m, k, n, contiguity, .. } => {
                 let result = dispatch_matmul(lhs, rhs, dst, b, m, k, n, contiguity, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::MatmulResponse ( result ), err)
+                sync_job!(Messages::MatmulResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             Messages::CopyRangeWithin { dst, src, dst_offset, src_offset, len, .. } => {
                 let result = dispath_copy_within(dst, src, dst_offset, src_offset, len, &connection);
-                let err = result.as_ref().err().cloned();
-                (Messages::CopyRangeWithinResponse ( result ), err)
+                sync_job!(Messages::CopyRangeWithinResponse(result), task_id: job.task_id, connection: connection, err: result.as_ref().err().cloned());
             },
             _ => panic!("Not a job for queue")
         };
-        let completion_response = Response {
-            asynchronous: true,
-            complete: true,
-            task_id,
-            error,
-            message
-        };
-        let _ = connection.queue_response(completion_response);
     }
 }
 
