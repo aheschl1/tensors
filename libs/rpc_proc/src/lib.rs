@@ -4,15 +4,236 @@
 //! generates RPC client routines for each method in the impl block. Methods can be customized with the
 //! `#[rpc(...)]` attribute to control code generation.
 
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::HashMap};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parenthesized, parse::{Parse, ParseStream}, parse_macro_input, parse_quote, Expr, Ident, ItemImpl, PathArguments, Token, Type};
+use syn::{parenthesized, parse::{Parse, ParseStream}, parse_macro_input, parse_quote, Attribute, Expr, Fields, Ident, ItemImpl, PathArguments, Token, Type, Variant};
 use syn::Result;
 
 
 #[proc_macro_attribute]
+/// When putting this on top of an enum of message variants,
+/// a function for switching over commands will be generated.
+/// This function will either a) put messages into an async queue
+/// or b) execute sync code directly, returning a response.
+/// 
+/// The macro requires in the artibute one argument: the module of the dispatch functions.
+/// This is such that the macro can turn VariantName into dispatch_module::dispatch_variant_name.
+/// The arguments passed to the dispatch will be the in order fields of the variant.
+/// 
+/// A sync message will result in a response being returned directly. 
+/// The signature of the function is as follows:
+/// 
+/// ```ignore
+/// #[inline(always)]
+/// fn handle_request(
+///     request: Request, 
+///     connection: &<Arg to macro>,
+/// ){ 
+/// ```
+pub fn request_handle(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let dispatch_args = parse_macro_input!(attr as HandleArgs);
+    let mut enum_block = parse_macro_input!(item as syn::ItemEnum);
+    let enum_ident = &enum_block.ident;
 
+    // variant ident : gen routine
+    let mut handle_arms = HashMap::new();
+
+    for variant in enum_block.variants.iter_mut() {
+        if variant.ident.to_string().contains("Response") {
+            // todo, assert that the response exists for all types which are not skip
+            continue;
+        }
+        let variant_args = if let Some(attr) = rpc_attr(&variant.attrs) {
+            let args = parse_variant_args(attr).expect("Failed to parse args");
+            // Remove the helper attribute so it doesn't appear in output
+            variant.attrs.retain(|a| !a.path().is_ident("rpc"));
+            Some(args)
+        } else {
+            None
+        }.unwrap_or_default();
+
+        if variant_args.skip {
+            continue;
+        }
+        let (routine, fields) = process_variant(variant, &variant_args, enum_ident, &dispatch_args.dispatch_module);
+        handle_arms.insert(variant.ident.clone(), (routine, fields));
+    }
+
+    let connection_type = dispatch_args.connection_type;
+    let mut match_body = quote! {};
+
+    for (variant, (routine, fields)) in handle_arms.iter() {
+        match_body = quote! {
+            #match_body
+            #enum_ident::#variant { #fields } => {
+                #routine
+            },
+        }
+    }
+
+    quote! {
+        #enum_block
+
+        fn handle_request_(
+            message: #enum_ident,
+            task_id: u32,
+            connection: #connection_type
+        ) {
+            match message {
+                #match_body
+            };
+        }
+    }.into()
+}
+
+// return the body of the handle
+fn process_variant(variant: &Variant, variant_args: &VariantArgs, enum_ident: &Ident, dispatch_mod: &syn::Path) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let (fields_toks, fields) = extract_fields(&variant);
+
+    let caller_func_name = format_ident!("dispatch_{}", from_camel_to_snake(&variant.ident.to_string()));
+    let response_variant = format_ident!("{}Response", variant.ident);
+    let values = fields.iter().map(|(n, _)| n);
+    let body = quote!{
+        let result = #dispatch_mod::#caller_func_name(
+            #( #values ),* 
+            connection
+        );
+        let message = #enum_ident::#response_variant(result);
+        let err = result.as_ref().err().cloned();
+        // todo - Response as an arg
+        let response = Response {
+            asynchronous: false,
+            complete: true,
+            task_id: task_id, // arg in func where this will be placed
+            error: err,
+            message: message
+        };
+        // connection is also an arg in the greater function
+        connection.queue_response(response).expect("Failed to send message");
+    };
+
+    (body, fields_toks)
+}
+
+type VariantFields = Vec<(Ident, Type)>;
+
+fn extract_fields(variant: &Variant) -> (proc_macro2::TokenStream, VariantFields) {
+    // given a variant, assert that the fields are all named
+    // if they are not named, return error in token stream.
+    // otherwise {name: type, name2: type2, etc}
+    match &variant.fields {
+        Fields::Named(fields) => {
+            let mut field_toks = quote! {};
+            let mut variant_fields = vec![];
+            for field in fields.named.iter() {
+                let new_toks = if let Some(ident) = &field.ident {
+                    let t = &field.ty;
+                    variant_fields.push((ident.clone(), t.clone()));
+                    quote! {
+                        #ident
+                    }
+                } else {
+                    syn::Error::new_spanned(&field.ident, "RPC dispatch requires named args").to_compile_error()
+                };
+                field_toks = quote! {
+                    #field_toks #new_toks,
+                }
+            }
+            (field_toks, variant_fields)
+        },
+        _ => {
+            (syn::Error::new_spanned(&variant.fields, "RPC request handle requires named fields").to_compile_error(), vec![])
+        }
+    }
+}
+
+struct VariantArgs {
+    sync: bool,
+    skip: bool,
+}
+
+impl Default for VariantArgs {
+    fn default() -> Self {
+        Self { sync: true, skip: false }
+    }
+}
+
+fn parse_variant_args(attrs: &Attribute) -> Result<VariantArgs> {
+    // find for #[rpc(sync)]. the absence of sync means async
+    let mut args = VariantArgs::default();
+    attrs.parse_nested_meta(|meta| {
+        if meta.path.is_ident("async") {
+            args.sync = false;
+            Ok(())
+        } else if meta.path.is_ident("skip") {
+            args.skip = true;
+            Ok(())
+        } else {
+            Err(meta.error("unsupported rpc attribute argument"))
+        }
+    })?;
+    Ok(args)
+}
+
+struct HandleArgs {
+    connection_type: Type,
+    dispatch_module: syn::Path,
+}
+
+
+impl Parse for HandleArgs {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut connection_type: Option<Type> = None;
+        let mut dispatch_module: Option<syn::Path> = None;
+
+        let args = syn::punctuated::Punctuated::<syn::Meta, Token![,]>::parse_terminated(input)?;
+
+        for meta in args {
+            match meta {
+                syn::Meta::List(list) if list.path.is_ident("connection") => {
+                    if connection_type.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            list.path,
+                            "duplicate `connection` argument",
+                        ));
+                    }
+                    let ty: Type = syn::parse2(list.tokens)?;
+                    connection_type = Some(ty);
+                }
+
+                syn::Meta::List(list) if list.path.is_ident("dispatch") => {
+                    if dispatch_module.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            list.path,
+                            "duplicate `dispatch` argument",
+                        ));
+                    }
+                    let path: syn::Path = syn::parse2(list.tokens)?;
+                    dispatch_module = Some(path);
+                }
+
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        meta,
+                        "expected `connection(Type)` or `dispatch(path)`",
+                    ));
+                }
+            }
+        }
+
+        Ok(HandleArgs {
+            connection_type: connection_type.ok_or_else(|| {
+                syn::Error::new(input.span(), "missing `connection(...)` argument")
+            })?,
+            dispatch_module: dispatch_module.ok_or_else(|| {
+                syn::Error::new(input.span(), "missing `dispatch(...)` argument")
+            })?,
+        })
+    }
+}
+
+#[proc_macro_attribute]
 /// Attribute macro to generate RPC client routines for each method in an impl block.
 ///
 /// # Usage
@@ -185,6 +406,52 @@ fn from_snake_to_camel(s: &str) -> String {
             }
         })
         .collect()
+}
+
+#[inline]
+fn from_camel_to_snake(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    let mut prev: Option<char> = None;
+
+    while let Some(c) = chars.next() {
+        let next = chars.peek().copied();
+
+        if c.is_ascii_uppercase() {
+            // Insert underscore before an uppercase if:
+            // - it's not the first char, and
+            // - previous was lowercase (boundary), or
+            // - previous was uppercase but next is lowercase (end of acronym).
+            let insert_underscore = match prev {
+                None => false,
+                Some(p) => {
+                    p.is_ascii_lowercase()
+                        || (p.is_ascii_uppercase() && next.map(|n| n.is_ascii_lowercase()).unwrap_or(false))
+                }
+            };
+            if insert_underscore && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else if c.is_ascii_digit() {
+            // If digit is at start, prefix underscore so it "sticks" as its own token.
+            // If previous char was a digit, keep contiguous digits together.
+            // If previous char was a letter, insert underscore so the digit attaches to the following letter (e.g. Foo1Bar -> foo_1bar).
+            if prev.is_none() {
+                out.push('_');
+            } else if !prev.unwrap().is_ascii_digit() && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.push(c);
+        } else {
+            // normal lowercase/other characters
+            out.push(c.to_ascii_lowercase());
+        }
+
+        prev = Some(c);
+    }
+
+    out
 }
 
 

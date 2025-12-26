@@ -213,10 +213,12 @@ impl_typeless_buf_conversions!(
 );
 
 #[derive(Serialize, Deserialize)]
+#[rpc_proc::request_handle(connection(Temp), dispatch(super::enumdispatch))]
 pub (crate) enum Messages {
     ErrorResponse {
         message: String,
     },
+    #[rpc(skip)]
     DeviceType,
     DeviceTypeResponse {
         device_type: DeviceType
@@ -252,6 +254,7 @@ pub (crate) enum Messages {
     },
     WriteResponse (Result<(), TensorError>),
 
+    #[rpc(skip)]
     Len {
         buf: TypelessBuf,
     },
@@ -414,6 +417,7 @@ pub (crate) enum Messages {
     },
     CopyRangeWithinResponse(Result<(), TensorError>),
 
+    #[rpc(skip)]
     ActionCompleted(u32)
 
 }

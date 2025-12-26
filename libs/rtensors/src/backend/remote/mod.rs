@@ -2,7 +2,7 @@
 pub mod server;
 pub mod client;
 pub mod protocol;
-mod enumdispatch;
+pub(crate) mod enumdispatch;
 #[cfg(test)]
 mod remote_tests;
 
