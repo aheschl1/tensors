@@ -1911,99 +1911,11 @@ pub mod protocol {
         CopyRangeWithinResponse(Result<(), TensorError>),
         ActionCompleted(u32),
     }
-    #[inline(always)]
     fn handle_request_(message: Messages, task_id: u32, connection: Temp) {
         match message {
-            Messages::Copy { src } => {
-                let result = super::enumdispatch::dispatch_copy(src, connection);
-                let message = Messages::CopyResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplySigmoidContiguous { buf, offset, len } => {
-                let result = super::enumdispatch::dispatch_apply_sigmoid_contiguous(
-                    buf,
-                    offset,
-                    len,
-                    connection,
-                );
-                let message = Messages::ApplySigmoidContiguousResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyTanhNd { buf, offset, shape, stride } => {
-                let result = super::enumdispatch::dispatch_apply_tanh_nd(
-                    buf,
-                    offset,
-                    shape,
-                    stride,
-                    connection,
-                );
-                let message = Messages::ApplyTanhNdResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::Len { buf } => {
-                let result = super::enumdispatch::dispatch_len(buf, connection);
-                let message = Messages::LenResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyRelu1dStrided { buf, offset, stride, len } => {
-                let result = super::enumdispatch::dispatch_apply_relu_1d_strided(
-                    buf,
-                    offset,
-                    stride,
-                    len,
-                    connection,
-                );
-                let message = Messages::ApplyRelu1dStridedResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyReluContiguous { buf, offset, len } => {
-                let result = super::enumdispatch::dispatch_apply_relu_contiguous(
-                    buf,
-                    offset,
-                    len,
-                    connection,
-                );
-                let message = Messages::ApplyReluContiguousResponse(result);
+            Messages::Alloc { len, dtype } => {
+                let result = super::enumdispatch::dispatch_alloc(len, dtype, connection);
+                let message = Messages::AllocResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2030,46 +1942,16 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::ApplyElementwiseBinaryContiguous { buf, op, start, len } => {
-                let result = super::enumdispatch::dispatch_apply_elementwise_binary_contiguous(
+            Messages::ApplyElementwiseBinaryNd { buf, op, offset, shape, stride } => {
+                let result = super::enumdispatch::dispatch_apply_elementwise_binary_nd(
                     buf,
                     op,
-                    start,
-                    len,
-                    connection,
-                );
-                let message = Messages::ApplyElementwiseBinaryContiguousResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::DeviceType { .. } => {
-                let result = super::enumdispatch::dispatch_device_type(connection);
-                let message = Messages::DeviceTypeResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyTanhContiguous { buf, offset, len } => {
-                let result = super::enumdispatch::dispatch_apply_tanh_contiguous(
-                    buf,
                     offset,
-                    len,
+                    shape,
+                    stride,
                     connection,
                 );
-                let message = Messages::ApplyTanhContiguousResponse(result);
+                let message = Messages::ApplyElementwiseBinaryNdResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2112,6 +1994,76 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
+            Messages::ApplyElementwiseBinaryContiguous { buf, op, start, len } => {
+                let result = super::enumdispatch::dispatch_apply_elementwise_binary_contiguous(
+                    buf,
+                    op,
+                    start,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplyElementwiseBinaryContiguousResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::Copy { src } => {
+                let result = super::enumdispatch::dispatch_copy(src, connection);
+                let message = Messages::CopyResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplySigmoidNd { buf, offset, shape, stride } => {
+                let result = super::enumdispatch::dispatch_apply_sigmoid_nd(
+                    buf,
+                    offset,
+                    shape,
+                    stride,
+                    connection,
+                );
+                let message = Messages::ApplySigmoidNdResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyTanhNd { buf, offset, shape, stride } => {
+                let result = super::enumdispatch::dispatch_apply_tanh_nd(
+                    buf,
+                    offset,
+                    shape,
+                    stride,
+                    connection,
+                );
+                let message = Messages::ApplyTanhNdResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
             Messages::ApplyElementwiseBinary1dStrided {
                 buf,
                 op,
@@ -2138,14 +2090,50 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::Write { buf, offset, value } => {
-                let result = super::enumdispatch::dispatch_write(
-                    buf,
-                    offset,
-                    value,
+            Messages::CopyFromSlice { dst, src } => {
+                let result = super::enumdispatch::dispatch_copy_from_slice(
+                    dst,
+                    src,
                     connection,
                 );
-                let message = Messages::WriteResponse(result);
+                let message = Messages::CopyFromSliceResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyNegContiguous { buf, start, len } => {
+                let result = super::enumdispatch::dispatch_apply_neg_contiguous(
+                    buf,
+                    start,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplyNegContiguousResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyNegNd { buf, offset, shape, stride } => {
+                let result = super::enumdispatch::dispatch_apply_neg_nd(
+                    buf,
+                    offset,
+                    shape,
+                    stride,
+                    connection,
+                );
+                let message = Messages::ApplyNegNdResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2198,15 +2186,88 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::ApplyNegNd { buf, offset, shape, stride } => {
-                let result = super::enumdispatch::dispatch_apply_neg_nd(
+            Messages::ApplyRelu1dStrided { buf, offset, stride, len } => {
+                let result = super::enumdispatch::dispatch_apply_relu_1d_strided(
+                    buf,
+                    offset,
+                    stride,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplyRelu1dStridedResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplySigmoidContiguous { buf, offset, len } => {
+                let result = super::enumdispatch::dispatch_apply_sigmoid_contiguous(
+                    buf,
+                    offset,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplySigmoidContiguousResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyTanhContiguous { buf, offset, len } => {
+                let result = super::enumdispatch::dispatch_apply_tanh_contiguous(
+                    buf,
+                    offset,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplyTanhContiguousResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyReluNd { buf, offset, shape, stride } => {
+                let result = super::enumdispatch::dispatch_apply_relu_nd(
                     buf,
                     offset,
                     shape,
                     stride,
                     connection,
                 );
-                let message = Messages::ApplyNegNdResponse(result);
+                let message = Messages::ApplyReluNdResponse(result);
+                let err = result.as_ref().err().cloned();
+                let response = Response {
+                    asynchronous: false,
+                    complete: true,
+                    task_id: task_id,
+                    error: err,
+                    message: message,
+                };
+                connection.queue_response(response).expect("Failed to send message");
+            }
+            Messages::ApplyReluContiguous { buf, offset, len } => {
+                let result = super::enumdispatch::dispatch_apply_relu_contiguous(
+                    buf,
+                    offset,
+                    len,
+                    connection,
+                );
+                let message = Messages::ApplyReluContiguousResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2226,25 +2287,6 @@ pub mod protocol {
                     connection,
                 );
                 let message = Messages::ApplySigmoid1dStridedResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::Broadcast { left, right, dst, op } => {
-                let result = super::enumdispatch::dispatch_broadcast(
-                    left,
-                    right,
-                    dst,
-                    op,
-                    connection,
-                );
-                let message = Messages::BroadcastResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2275,25 +2317,6 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::ApplySigmoidNd { buf, offset, shape, stride } => {
-                let result = super::enumdispatch::dispatch_apply_sigmoid_nd(
-                    buf,
-                    offset,
-                    shape,
-                    stride,
-                    connection,
-                );
-                let message = Messages::ApplySigmoidNdResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
             Messages::Dump { src } => {
                 let result = super::enumdispatch::dispatch_dump(src, connection);
                 let message = Messages::DumpResponse(result);
@@ -2307,29 +2330,14 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::ActionCompleted { .. } => {
-                let result = super::enumdispatch::dispatch_action_completed(connection);
-                let message = Messages::ActionCompletedResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyElementwiseBinaryNd { buf, op, offset, shape, stride } => {
-                let result = super::enumdispatch::dispatch_apply_elementwise_binary_nd(
+            Messages::Write { buf, offset, value } => {
+                let result = super::enumdispatch::dispatch_write(
                     buf,
-                    op,
                     offset,
-                    shape,
-                    stride,
+                    value,
                     connection,
                 );
-                let message = Messages::ApplyElementwiseBinaryNdResponse(result);
+                let message = Messages::WriteResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,
@@ -2340,63 +2348,15 @@ pub mod protocol {
                 };
                 connection.queue_response(response).expect("Failed to send message");
             }
-            Messages::ApplyNegContiguous { buf, start, len } => {
-                let result = super::enumdispatch::dispatch_apply_neg_contiguous(
-                    buf,
-                    start,
-                    len,
-                    connection,
-                );
-                let message = Messages::ApplyNegContiguousResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::Alloc { len, dtype } => {
-                let result = super::enumdispatch::dispatch_alloc(len, dtype, connection);
-                let message = Messages::AllocResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::CopyFromSlice { dst, src } => {
-                let result = super::enumdispatch::dispatch_copy_from_slice(
+            Messages::Broadcast { left, right, dst, op } => {
+                let result = super::enumdispatch::dispatch_broadcast(
+                    left,
+                    right,
                     dst,
-                    src,
+                    op,
                     connection,
                 );
-                let message = Messages::CopyFromSliceResponse(result);
-                let err = result.as_ref().err().cloned();
-                let response = Response {
-                    asynchronous: false,
-                    complete: true,
-                    task_id: task_id,
-                    error: err,
-                    message: message,
-                };
-                connection.queue_response(response).expect("Failed to send message");
-            }
-            Messages::ApplyReluNd { buf, offset, shape, stride } => {
-                let result = super::enumdispatch::dispatch_apply_relu_nd(
-                    buf,
-                    offset,
-                    shape,
-                    stride,
-                    connection,
-                );
-                let message = Messages::ApplyReluNdResponse(result);
+                let message = Messages::BroadcastResponse(result);
                 let err = result.as_ref().err().cloned();
                 let response = Response {
                     asynchronous: false,

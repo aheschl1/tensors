@@ -45,7 +45,7 @@ pub fn request_handle(attr: TokenStream, item: TokenStream) -> TokenStream {
             continue;
         }
         let variant_args = if let Some(attr) = rpc_attr(&variant.attrs) {
-            let args = parse_variant_args(attr).expect("Failed to parse args");
+            let args = VariantArgs::parse(attr).expect("Failed to parse args");
             // Remove the helper attribute so it doesn't appear in output
             variant.attrs.retain(|a| !a.path().is_ident("rpc"));
             Some(args)
@@ -159,21 +159,25 @@ impl Default for VariantArgs {
     }
 }
 
-fn parse_variant_args(attrs: &Attribute) -> Result<VariantArgs> {
-    // find for #[rpc(sync)]. the absence of sync means async
-    let mut args = VariantArgs::default();
-    attrs.parse_nested_meta(|meta| {
-        if meta.path.is_ident("async") {
-            args.sync = false;
-            Ok(())
-        } else if meta.path.is_ident("skip") {
-            args.skip = true;
-            Ok(())
-        } else {
-            Err(meta.error("unsupported rpc attribute argument"))
-        }
-    })?;
-    Ok(args)
+impl VariantArgs {
+    fn parse(attr: &Attribute) -> syn::Result<Self> {
+        let mut args = VariantArgs::default();
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip") {
+                args.skip = true;
+                Ok(())
+            } else if meta.path.is_ident("sync") {
+                args.sync = true;
+                Ok(())
+            } else if meta.path.is_ident("async") {
+                args.sync = false;
+                Ok(())
+            } else {
+                Err(meta.error("unsupported rpc attribute argument"))
+            }
+        })?;
+        Ok(args)
+    }
 }
 
 struct HandleArgs {
@@ -184,54 +188,47 @@ struct HandleArgs {
 
 impl Parse for HandleArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut connection_type: Option<Type> = None;
-        let mut dispatch_module: Option<syn::Path> = None;
+        let mut connection_type = None;
+        let mut dispatch_module = None;
 
-        let args = syn::punctuated::Punctuated::<syn::Meta, Token![,]>::parse_terminated(input)?;
+        while !input.is_empty() {
+            let ident: Ident = input.parse()?;
+            let content;
+            parenthesized!(content in input);
 
-        for meta in args {
-            match meta {
-                syn::Meta::List(list) if list.path.is_ident("connection") => {
-                    if connection_type.is_some() {
-                        return Err(syn::Error::new_spanned(
-                            list.path,
-                            "duplicate `connection` argument",
-                        ));
-                    }
-                    let ty: Type = syn::parse2(list.tokens)?;
-                    connection_type = Some(ty);
+            if ident == "connection" {
+                if connection_type.is_some() {
+                    return Err(input.error("duplicate `connection`"));
                 }
-
-                syn::Meta::List(list) if list.path.is_ident("dispatch") => {
-                    if dispatch_module.is_some() {
-                        return Err(syn::Error::new_spanned(
-                            list.path,
-                            "duplicate `dispatch` argument",
-                        ));
-                    }
-                    let path: syn::Path = syn::parse2(list.tokens)?;
-                    dispatch_module = Some(path);
+                connection_type = Some(content.parse()?);
+            } else if ident == "dispatch" {
+                if dispatch_module.is_some() {
+                    return Err(input.error("duplicate `dispatch`"));
                 }
+                dispatch_module = Some(content.parse()?);
+            } else {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "expected `connection(...)` or `dispatch(...)`",
+                ));
+            }
 
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        meta,
-                        "expected `connection(Type)` or `dispatch(path)`",
-                    ));
-                }
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
             }
         }
 
-        Ok(HandleArgs {
+        Ok(Self {
             connection_type: connection_type.ok_or_else(|| {
-                syn::Error::new(input.span(), "missing `connection(...)` argument")
+                input.error("missing `connection(...)`")
             })?,
             dispatch_module: dispatch_module.ok_or_else(|| {
-                syn::Error::new(input.span(), "missing `dispatch(...)` argument")
+                input.error("missing `dispatch(...)`")
             })?,
         })
     }
 }
+
 
 #[proc_macro_attribute]
 /// Attribute macro to generate RPC client routines for each method in an impl block.
