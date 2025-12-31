@@ -104,6 +104,10 @@ void launch_negate_nd_affine_i128(__int128_t* data, size_t offset, const ptrdiff
 void launch_sigmoid_contiguous_f32(float* data, size_t start, size_t len, unsigned int block_size);
 void launch_sigmoid_contiguous_f64(double* data, size_t start, size_t len, unsigned int block_size);
 
+
+void launch_test_summy(double* data, size_t start, size_t len, unsigned int block_size);
+
+
 void launch_sigmoid_strided_f32(float* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
 void launch_sigmoid_strided_f64(double* data, size_t offset, ptrdiff_t stride, size_t len, unsigned int block_size);
 
