@@ -895,6 +895,8 @@ impl Backend for Cuda {
         }
     }
 
+    
+
     fn apply_relu_contiguous<T: TensorValue>(
         &self,
         buf: &mut Self::Buf<T>,
@@ -1407,12 +1409,21 @@ fn apply_sum_flat_contiguous<T: TensorValue>(
     }
 }
 
-fn _apply_sum_nd<T: TensorValue>(
+
+
+/// This assumes a  contiguous tensor.
+fn _apply_sum_contiguous<T: TensorValue>(
     backend: &Cuda,
     (in_d, in_d_meta): (&mut <Cuda as Backend>::Buf<T>, MetaTensor),
     (out_d, _): (&mut <Cuda as Backend>::Buf<T>, MetaTensor),
     axis: usize
 ) -> Result<(), TensorError> {
+
+
+    // This is a temporary limitation of the system.
+    assert!(in_d_meta.is_contiguous(), "Currently the library only accepts contiguous tensors.");
+    
+
     let stream = backend.stream();
 
 
@@ -1422,37 +1433,6 @@ fn _apply_sum_nd<T: TensorValue>(
     // Calculate the inner and outer dimensions.
     let inner = in_d_meta.inner_dimensions(axis);
     let outer = in_d_meta.outer_dimensions(axis);
-
-    println!("original_shape={:?}\nnew_shape=[{outer}, {red_len}, {inner}]\n", in_d_meta.shape().as_slice());
-    
-    // TODO: here we are assuming 
-    let stride_a = inner;
-    
-
-
-    let rank = in_d_meta.rank();
-    let size = in_d_meta.size();
-
-    let shape_buf = backend.alloc_from_slice(
-        in_d_meta
-            .shape()
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as u64)
-            .collect::<Vec<u64>>()
-            .into_boxed_slice(),
-    )?;
-    let stride_buf = backend.alloc_from_slice(
-        in_d_meta
-            .strides()
-            .0
-            .to_vec()
-            .into_iter()
-            .map(|x| x as i64)
-            .collect::<Vec<i64>>()
-            .into_boxed_slice(),
-    )?;
 
 
     assert!(DEFAULT_BLOCK_SIZE <= 256, "We do not support this right now");
@@ -1464,12 +1444,6 @@ fn _apply_sum_nd<T: TensorValue>(
 
             let (raw_output_ptr, _) = out_d.ptr.device_ptr(&stream);
             let out_ptr = raw_output_ptr as *mut $t;
-
-            let (stride_buf_ptr, _) = stride_buf.ptr.device_ptr(&stream);
-            // let stride_buf_ptr = raw_stride_buf_ptr as *mut i64;
-        
-            let (shape_buf_ptr, _) = shape_buf.ptr.device_ptr(&stream);
-            // let shape_buf_ptr = raw_shape_buf_ptr as *mut u64;
 
             unsafe {
                 $launch_fn(
@@ -1696,7 +1670,7 @@ generic_matmul_impl!(types::boolean, launch_matmul_boolean, bool);
 #[cfg(test)]
 mod tests {
     use crate::{
-        backend::cuda::{_apply_sum_nd, Cuda},
+        backend::cuda::{_apply_sum_contiguous, Cuda},
         core::{MetaTensorView, primitives::CudaTensor, tensor::AsTensor},
         ops::unary::{InplaceUnaryOp, Tanh},
     };
@@ -1737,7 +1711,7 @@ mod tests {
         let in_tensor = (&mut cuda.buf, cuda.meta.clone());
         let out_tensor = (&mut out.buf, out.meta.clone());
 
-        _apply_sum_nd(&cuda.backend, in_tensor,  out_tensor, 1)
+        _apply_sum_contiguous(&cuda.backend, in_tensor,  out_tensor, 1)
             .unwrap();
         
 
