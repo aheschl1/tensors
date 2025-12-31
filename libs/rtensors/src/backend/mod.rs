@@ -217,6 +217,8 @@ pub trait Backend: Send + Sync + 'static + Clone {
         op: ReductionOpTypes
     ) -> Result<(), TensorError>;
 
+
+    /// currently assuming that the tensor is contiguous
     fn apply_reduce<T: TensorValue>(
         &self, 
         src: (&Self::Buf<T>, &MetaTensor), 
