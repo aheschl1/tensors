@@ -1,4 +1,4 @@
-use crate::{backend::BackendMatMul, core::{meta::ContiguityTypes, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorAccess, TensorError}, value::TensorValue, Dim, MetaTensor, MetaTensorView, Shape}, ops::{broadcast::compute_broadcasted_params, linalg::MatMul}};
+use crate::{backend::BackendMatMul, core::{meta::ContiguityTypes, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorAccess, TensorError}, value::TensorValue, Dim, MetaTensor, MetaTensorView, Shape, Strides}, ops::linalg::MatMul};
 
 impl<L, R, T, B> MatMul<R, T, B> for L
 where
@@ -98,19 +98,6 @@ where
         // batch dims are all leading dims except the last two
         let lhs_batch_dims: Vec<usize> = lhs_meta.shape.0[..lr - 2].to_vec();
         let rhs_batch_dims: Vec<usize> = rhs_meta.shape.0[..rr - 2].to_vec();
-
-        // goal, find broadcast params for batch dims.
-        // this will allow us to handle broadcasting out in matmul
-        let lhs_batch_meta = MetaTensor::new(
-            Shape::from(lhs_batch_dims.clone()),
-            lhs_meta.strides.0[..lr - 2].to_vec(),
-            0, // offset doesn't matter for broadcasting
-        );
-        let rhs_batch_meta = MetaTensor::new(
-            Shape::from(rhs_batch_dims.clone()),
-            rhs_meta.strides.0[..rr - 2].to_vec(),
-            0,
-        );
 
         // let broadcasted_params = compute_broadcasted_params(&lhs_batch_meta, &rhs_batch_meta);
 
@@ -227,19 +214,17 @@ fn contiguity_type(
 
     // we need to check on the batch dims - if there are multiple batch dims, they need to be contiguous together
     // if they are not, we say None, if they are, we take the previous
-    let batch_dims = &shape.0[..shape.len() - 2];
-    let batch_strides = &strides.0[..strides.len() - 2];
-    if batch_dims.len() > 1 {
-        let mut expected_stride = batch_strides[batch_strides.len() - 1];
-        for i in (0..batch_dims.len() - 1).rev() {
-            let dim = batch_dims[i + 1];
-            let stride = batch_strides[i];
-            expected_stride *= dim as isize;
-            if stride != expected_stride {
-                return ContiguityTypes::None;
-            }
+    let batch_meta = MetaTensor::new(
+        Shape::from(&shape.0[..shape.len() - 2]), 
+        Strides::from(&strides.0[..strides.len() - 2]), 
+        0 // does not matter for contiguity check
+    );
+    if batch_meta.rank() > 1 {
+        if !batch_meta.is_flat() {
+            ContiguityTypes::None
+        } else {
+            inner_contiguity
         }
-        inner_contiguity
     } else {
         inner_contiguity
     }
