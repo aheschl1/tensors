@@ -217,6 +217,13 @@ pub trait Backend: Send + Sync + 'static + Clone {
         op: ReductionOpTypes
     ) -> Result<(), TensorError>;
 
+    fn apply_reduce_contiguous_nd<T: TensorValue>(
+        &self, 
+        src: (&Self::Buf<T>, &MetaTensor), 
+        dst: (&mut Self::Buf<T>, &MetaTensor), 
+        dim: Dim,
+        op: ReductionOpTypes
+    ) -> Result<(), TensorError>;
 
     /// currently assuming that the tensor is contiguous
     fn apply_reduce<T: TensorValue>(
@@ -237,9 +244,15 @@ pub trait Backend: Send + Sync + 'static + Clone {
                 src_meta.size(),
                 op
             );
+        }else{
+            return self.apply_reduce_contiguous_nd(
+                (src_buf, src_meta),
+                (dst_buf, dst_meta),
+                dim,
+                op
+            );
         }
 
-        panic!();
     }
 }
 
