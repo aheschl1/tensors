@@ -990,10 +990,39 @@ impl Backend for Cuda {
 
         // Dispatch based on type - only signed types support negation
         match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
-            id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_tanh_contiguous_f64, f64),
+            // id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
+            id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_test_summy, f64),
             _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
         }
+
+        //  let stream = self.stream();
+
+
+        // macro_rules! launch_negate {
+        //     ($launch_fn:ident, $t:ty) => {{
+        //         let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+        //         let data_ptr = raw_ptr as *mut $t;
+
+        //         unsafe {
+        //             $launch_fn(
+        //                 data_ptr as *mut $t,
+        //                 start,
+        //                 len,
+        //                 DEFAULT_BLOCK_SIZE,
+        //             );
+        //         }
+        //         self.dirty();
+        //         Ok(())
+        //     }};
+        // }
+        
+
+        // // Dispatch based on type - only signed types support negation
+        // match std::any::TypeId::of::<T>() {
+        //     id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
+        //     id if id == std::any::TypeId::of::<f64>() => launch_negate!(launch_tanh_contiguous_f64, f64),
+        //     _ => Err(TensorError::CudaError("Unsupported type for CUDA negation operation".to_string())),
+        // }
     }
     
     fn apply_tanh_1d_strided<T: TensorValue + Exp>(
@@ -1288,3 +1317,18 @@ generic_matmul_impl!(i32, launch_matmul_i32, i32);
 generic_matmul_impl!(i64, launch_matmul_i64, i64);
 generic_matmul_impl!(i128, launch_matmul_i128, i128);
 generic_matmul_impl!(types::boolean, launch_matmul_boolean, bool);
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{backend::cuda::Cuda, core::{primitives::CudaTensor, tensor::AsTensor}, ops::unary::{InplaceUnaryOp, Tanh}};
+
+
+
+    #[test]
+    pub fn test_reductio() {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> = CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, 0.3, 0.3, -0.1, -0.3, 0.3], (4, 2)).unwrap();
+        println!("CUDA: {:?}", cuda.owned().cpu().unwrap());
+        cuda.tanh_inplace();
+    }
+}
