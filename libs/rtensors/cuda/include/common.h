@@ -15,7 +15,8 @@ enum ReductionOpCode: uint8_t {
     OP_MAX = 3,
     OP_MIN = 4,
     OP_MEAN = 5,
-    OP_SOFTMAX = 6
+    OP_POP_VARIANCE = 6,
+    OP_VARIANCE_UNBIASED = 7,
 };
 
 // Contiguity types for matrix layouts

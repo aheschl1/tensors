@@ -1755,6 +1755,14 @@ mod tests {
     }
 
     #[test]
+    pub fn test_reduce_total_variance() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.mean(&Idx::Item).unwrap().item().unwrap(), 4.5);
+    }
+
+    #[test]
     pub fn test_reduce_sum_case1() -> Result<(), Box<dyn Error>> {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![1., 0., 1., 0., 1., 1., 1., 0.], (4, 2))
@@ -1810,11 +1818,20 @@ mod tests {
     }
 
     #[test]
-    pub fn test_reduce_softmax_case1() -> Result<(), Box<dyn Error>> {
+    pub fn test_reduce_variance_case1() -> Result<(), Box<dyn Error>> {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
                 .unwrap();
-        assert_eq!(cuda.mean(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![2.5, 6.5], (1, 2))?.cpu()?);
+        assert_eq!(cuda.var(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1.6666666666666667f64, 1.6666666666666667], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_pop_var_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.pop_var(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1.25, 1.25], (1, 2))?.cpu()?);
         Ok(())
     }
 

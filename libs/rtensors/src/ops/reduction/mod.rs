@@ -7,7 +7,8 @@ pub enum ReductionOpTypes {
     Max = 3,
     Min = 4,
     Mean = 5,
-    Softmax = 6
+    PopVariance = 6,
+    UnbiasedVariance = 7
 }
 
 pub trait TotalReductionOp: Sized {
@@ -21,7 +22,8 @@ pub trait ReductionOp : Sized {
     fn mean(&self, axes: &Idx) -> Result<Self, TensorError>;
     fn max(&self, axes: &Idx) -> Result<Self, TensorError>;
     fn min(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn softmax(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn var(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError>;
 }
 
 macro_rules! do_reduce {
@@ -119,12 +121,20 @@ where
             do_reduce!(ReductionOpTypes::Mean, axes, self)
         }
     }
-    fn softmax(&self, axes: &Idx) -> Result<Self, TensorError> {
+    fn var(&self, axes: &Idx) -> Result<Self, TensorError> {
         if !self.is_contiguous() {
             let a = self.contiguous();
-            do_reduce!(ReductionOpTypes::Softmax, axes, a)
+            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, a)
         }else {
-            do_reduce!(ReductionOpTypes::Softmax, axes, self)
+            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, self)
+        }
+    }
+    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError> {
+        if !self.is_contiguous() {
+            let a = self.contiguous();
+            do_reduce!(ReductionOpTypes::PopVariance, axes, a)
+        }else {
+            do_reduce!(ReductionOpTypes::PopVariance, axes, self)
         }
     }
 }
