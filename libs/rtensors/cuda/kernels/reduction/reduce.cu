@@ -74,10 +74,9 @@ struct PostDivTotal
 };
 
 
+/// only ever launched with one element to be processed
 template <typename T, typename PostOp>
 __global__ void post_transform_kernel(T* out, size_t n, PostOp post) {
-
-    
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
         // printf("HI i = %d, out[%d] = %g\n", i, i, out[i]);
@@ -129,9 +128,8 @@ void launch_flat_contiguous_reduce(
 
     // Free the temporary storage allocation.
     cudaFree(&d_temp_storage);
-
-
     
+    // only ever one element so this is okay
     post_transform_kernel<<<1, block_size>>>(d_out, num_items, post);
 }
 

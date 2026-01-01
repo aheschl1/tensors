@@ -1,4 +1,4 @@
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape}};
+use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape, TensorView, TensorViewMut}};
 
 
 pub enum ReductionOpTypes {
@@ -11,20 +11,41 @@ pub enum ReductionOpTypes {
     UnbiasedVariance = 7
 }
 
-pub trait TotalReductionOp: Sized {
-    fn total_sum(&self) -> Result<Self, TensorError>;
+pub trait TotalReductionOp<T: TensorValue, B: Backend>: Sized + ReductionOp<T, B> {
+    fn total_sum(&self) -> Result<TensorBase<T, B>, TensorError> {
+        self.sum(&Idx::Item)
+    }
+    fn total_prod(&self) -> Result<TensorBase<T, B>, TensorError> {
+        self.prod(&Idx::Item)
+    }
+    fn total_mean(&self) -> Result<TensorBase<T, B>, TensorError> {
+        self.mean(&Idx::Item)
+    }
+    fn total_max(&self) -> Result<TensorBase<T, B>, TensorError>{
+        self.max(&Idx::Item)
+    }
+    fn total_min(&self) -> Result<TensorBase<T, B>, TensorError>{
+        self.min(&Idx::Item)
+    }
+    fn total_var(&self) -> Result<TensorBase<T, B>, TensorError>{
+        self.var(&Idx::Item)
+    }
+    fn total_pop_var(&self) -> Result<TensorBase<T, B>, TensorError>{
+        self.pop_var(&Idx::Item)
+    }
 }
 
-pub trait ReductionOp : Sized {
-    
-    fn sum(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn prod(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn mean(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn max(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn min(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn var(&self, axes: &Idx) -> Result<Self, TensorError>;
-    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError>;
+pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
+    fn sum(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn prod(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn mean(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn max(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn min(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn pop_var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
 }
+
+impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
 
 macro_rules! do_reduce {
     ($op:expr, $axes:ident, $tensor:ident) => {
@@ -32,10 +53,11 @@ macro_rules! do_reduce {
         match $axes {
             Idx::Item => {
                 let mut output = TensorBase::from_buf(vec![ T::ZERO ], vec![])?;
-                $tensor.backend.apply_reduce_total(
-                    (&$tensor.buf, &$tensor.meta), 
-                    (&mut output.buf, &output.meta), 
-                    0,
+                $tensor.backend.apply_reduce_contiguous_flat(
+                    &$tensor.buf,
+                    &mut output.buf, 
+                    $tensor.meta.offset,
+                    $tensor.meta.size(),
                     $op,
                 )?;
                 Ok(output)
@@ -60,84 +82,85 @@ macro_rules! do_reduce {
     };
 }
 
-
-impl<T, B> TotalReductionOp for TensorBase<T, B>
-where 
-    T: TensorValue,
-    B: Backend
-{
-     fn total_sum(&self) -> Result<Self, TensorError> {
-        self.sum(&Idx::Item)
-    }
-}
-
-impl<T, B> ReductionOp for TensorBase<T, B>
+impl<T: TensorValue, B: Backend, V> ReductionOp<T, B> for V
 where
-    T: TensorValue,
-    B: Backend,
+    V: AsView<T, B>,
 {
-   
-    fn sum(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+    fn sum(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::Sum, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Sum, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::Sum, axes, t)
         }
     }
 
-    fn prod(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+    fn prod(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::Prod, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Prod, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::Prod, axes, t)
         }
     }
 
-    fn max(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+    fn max(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::Max, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Max, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::Max, axes, t)
         }
     }
 
-    fn min(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+    fn min(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::Min, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Min, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::Min, axes, t)
         }
     }
 
-    fn mean(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+    fn mean(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::Mean, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Mean, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::Mean, axes, t)
         }
     }
-    fn var(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+
+    fn var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, t)
         }
     }
-    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
+
+    fn pop_var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
             do_reduce!(ReductionOpTypes::PopVariance, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::PopVariance, axes, self)
+        } else {
+            do_reduce!(ReductionOpTypes::PopVariance, axes, t)
         }
     }
 }
+
+
+// implement_reductionop!(TensorBase);
+// implement_reductionop!(TensorView<'a>);
+// implement_reductionop!(TensorViewMut<'a>);
 
 #[inline]
 fn materialize_output<T: TensorValue, B: Backend>(input: &MetaTensor, backend: B, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>{
@@ -172,12 +195,6 @@ fn reduction_output_meta(input: MetaTensor, axes: &Idx) -> MetaTensor {
         }
     }
 
-    // for (i, &dim) in input.shape.iter().enumerate() {
-    //     println!("i={i}, dim={dim}");
-    //     if i < idx_num {
-    //         output_shape.push(dim);
-    //     }
-    // }
     println!("materialziing output: {:?}", output_shape);
     let output_shape: Shape = Shape::from(output_shape);
     let strides = shape_to_stride(&output_shape);
