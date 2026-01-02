@@ -1317,7 +1317,7 @@ impl Backend for Cuda {
             dim: Dim,
             op: ReductionOpTypes
         ) -> Result<(), TensorError> {
-        todo!()
+        apply_nd_argmax_contiguous(self, src, dst, dim, op)
     }
     
     // impl_cpu_unary!{ relu, _temp }
@@ -1383,7 +1383,7 @@ fn apply_argmax_contiguous_single_elem<T: WeightValue>(
             unsafe {
                 $launch_fn(
                     data_ptr as *mut $t,
-                    out_ptr as *mut $t,
+                    out_ptr as *mut _,
                     start,
                     len,
                     op.get_code(),
@@ -1532,6 +1532,83 @@ fn apply_nd_reduction_contiguous<T: WeightValue>(
         },
         id if id == std::any::TypeId::of::<f32>() => {
             launch_negate!(launch_nd_reduce_contiguous_f32, f32)
+        },
+        _ => Err(TensorError::CudaError(
+            "Unsupported type for CUDA negation operation".to_string(),
+        )),
+    }
+}
+
+
+/// This assumes a  contiguous tensor.
+fn apply_nd_argmax_contiguous<T: WeightValue>(
+    backend: &Cuda,
+    (in_d, in_d_meta): (&<Cuda as Backend>::Buf<T>, &MetaTensor),
+    (out_d, _): (&mut <Cuda as Backend>::Buf<u64>, &MetaTensor),
+    axis: Dim,
+    code: ReductionOpTypes
+) -> Result<(), TensorError> {
+
+
+    let settings = populate_reduction_settings(&code);
+
+
+    // This is a temporary limitation of the system.
+    assert!(in_d_meta.is_contiguous(), "Currently the library only accepts contiguous tensors.");
+    
+
+    let stream = backend.stream();
+
+    // let settings = unsafe {
+    //     stream
+    //         .alloc::<ReductionSettings>(size_of::<ReductionSettings>())?
+    // };
+
+
+    // Calculate the reduction length.
+    let red_len = in_d_meta.shape()[axis];
+
+    // Calculate the inner and outer dimensions.
+    let inner = in_d_meta.inner_dimensions(axis);
+    let outer = in_d_meta.outer_dimensions(axis);
+
+
+    assert!(DEFAULT_BLOCK_SIZE <= 256, "We do not support this right now");
+
+    macro_rules! launch_negate {
+        ($launch_fn:ident, $t:ty) => {{
+            let (raw_ptr, _) = in_d.ptr.device_ptr(&stream);
+            let data_ptr = raw_ptr as *mut $t;
+
+            let (raw_output_ptr, _) = out_d.ptr.device_ptr(&stream);
+            let out_ptr = raw_output_ptr as *mut $t;
+
+            unsafe {
+                $launch_fn(
+                    data_ptr as *mut $t,
+                    out_ptr as *mut _,
+                    in_d_meta.offset(),
+                    inner,
+                    red_len,
+                    outer,
+                    code.get_code(),
+                    &settings as *const ReductionSettings,
+                    DEFAULT_BLOCK_SIZE
+                );
+            }
+            backend.dirty();
+            Ok(())
+        }};
+    }
+
+    // Dispatch based on type - only signed types support negation
+    match std::any::TypeId::of::<T>() {
+        // id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
+        id if id == std::any::TypeId::of::<f64>() => {
+            launch_negate!(launch_nd_argmax_contiguous_f64, f64)
+        },
+        id if id == std::any::TypeId::of::<f32>() => {
+            launch_negate!(launch_nd_argmax_contiguous_f32, f32)
         },
         _ => Err(TensorError::CudaError(
             "Unsupported type for CUDA negation operation".to_string(),
@@ -1881,6 +1958,15 @@ mod tests {
             CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
                 .unwrap();
         assert_eq!(cuda.mean(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![2.5, 6.5], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_argmax_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  4., 3., 2., 9., 6., 7., 1.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.argmax(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1, 0], (1, 2))?.cpu()?);
         Ok(())
     }
 

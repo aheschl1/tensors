@@ -153,10 +153,10 @@ DECLARE_REDUCTION_OP_HEADERS(double, f64)
 // Reduction operations
 #define DECLARE_ARGMAX_OP_HEADERS(TYPE, SUFFIX)                                                \
     void launch_flat_contiguous_argmax_##SUFFIX(                                                  \
-        const TYPE *data, TYPE *out, size_t start, size_t len,                                    \
+        const TYPE *data, uint64_t *out, size_t start, size_t len,                                    \
         ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size);        \
     void launch_nd_argmax_contiguous_##SUFFIX(                                                    \
-        TYPE *data, TYPE *out, size_t offset, size_t outer, size_t r, size_t inner,              \
+        TYPE *data, uint64_t *out, size_t offset, size_t outer, size_t r, size_t inner,              \
         ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size);
 
 // Float types

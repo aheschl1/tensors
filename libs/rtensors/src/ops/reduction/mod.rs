@@ -149,7 +149,9 @@ pub enum ReductionOpTypes {
         unbiased: bool
     },
     LogSumExp,
-    Norm(NormType)
+    Norm(NormType),
+    ArgMax,
+    ArgMin
 }
 
 impl ReductionOpTypes {
@@ -163,7 +165,9 @@ impl ReductionOpTypes {
             Self::Mean => 5,
             Self::Variance {..} | Self::Stdev { .. } => 6,
             Self::LogSumExp => 7,
-            Self::Norm(_) => 8
+            Self::Norm(_) => 8,
+            Self::ArgMax => 9,
+            Self::ArgMin => 10
             
         }
     }
@@ -241,6 +245,7 @@ pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
     }
 
     fn argmax(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError>;
+    fn argmin(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError>;
 }
 
 impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
@@ -440,7 +445,7 @@ where
     }
     fn argmax(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError> {
         let axes = axes.into();
-        let code = ReductionOpTypes::Max;
+        let code = ReductionOpTypes::ArgMax;
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -449,6 +454,18 @@ where
             do_argmax(code, &axes, &t)
         }
     }
+    fn argmin(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError> {
+        let axes = axes.into();
+        let code = ReductionOpTypes::ArgMin;
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
+            do_argmax(code, &axes, &a)
+        }else {
+            do_argmax(code, &axes, &t)
+        }
+    }
+    
 }
 
 #[inline]
