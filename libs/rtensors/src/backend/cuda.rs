@@ -998,6 +998,7 @@ impl Backend for Cuda {
 
     specify_trait_unary_cabal!{relu}
     specify_trait_unary_cabal!{abs}
+    specify_trait_unary_cabal!{sqrt}
 
     fn apply_sigmoid_contiguous<T: TensorValue + InvExp>(
         &self,
@@ -1298,17 +1299,6 @@ impl Backend for Cuda {
         apply_nd_reduction_contiguous(self, src, dst, dim, op)
     }
 
-    fn apply_sqrt_nd<T:TensorValue>(&self,buf: &mut Self::Buf<T>,offset:usize,shape: &[usize],stride: &[isize],) -> Result<(),TensorError>where T:SquareRoot {
-        todo!()
-    }
-    
-    fn apply_sqrt_1d_strided<T:TensorValue>(&self,buf: &mut Self::Buf<T>,offset:usize,stride:isize,len:usize) -> Result<(),TensorError>where T:SquareRoot {
-        todo!()
-    }
-    
-    fn apply_sqrt_contiguous<T:TensorValue>(&self,buf: &mut Self::Buf<T>,start:usize,len:usize) -> Result<(),TensorError>where T:SquareRoot {
-        todo!()
-    }
     
     // impl_cpu_unary!{ relu, _temp }
     // impl_cpu_unary! { neg, _temp }
