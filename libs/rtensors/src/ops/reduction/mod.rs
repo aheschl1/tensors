@@ -47,40 +47,47 @@ pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
 
 impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
 
-macro_rules! do_reduce {
-    ($op:expr, $axes:ident, $tensor:ident) => {
 
-        match $axes {
-            Idx::Item => {
-                let mut output = TensorBase::from_buf(vec![ T::ZERO ], vec![])?;
-                $tensor.backend.apply_reduce_contiguous_flat(
-                    &$tensor.buf,
-                    &mut output.buf, 
-                    $tensor.meta.offset,
-                    $tensor.meta.size(),
-                    $op,
-                )?;
-                Ok(output)
-                // Err(TensorError::WrongDims("test".to_string()))
-            }
-            Idx::At(axis) => {
-                let mut output = materialize_output::<T, B>(&$tensor.meta, $tensor.backend.clone(), &$axes)?;
-                $tensor.backend.apply_reduce(
-                    (&$tensor.buf, &$tensor.meta), 
-                    (&mut output.buf, &output.meta), 
-                    axis,
-                    $op,
-                )?;
-                Ok(output)
-            }
-            _ => Err(TensorError::WrongDims(
-                "Reduction over multiple axes is not implemented yet.".to_string(),
-            ))
+#[inline(always)]
+pub fn do_reduce<T, B>(
+    op: ReductionOpTypes,
+    axes: &Idx,
+    tensor: &impl AsView<T, B>,
+) -> Result<TensorBase<T, B>, TensorError>
+where
+    T: TensorValue,
+    B: Backend,
+{
+    let tensor = tensor.view();
+    match axes {
+        Idx::Item => {
+            let mut output = TensorBase::from_buf(vec![T::ZERO], vec![])?;
+            tensor.backend.apply_reduce_contiguous_flat(
+                &tensor.buf,
+                &mut output.buf,
+                tensor.meta.offset,
+                tensor.meta.size(),
+                op,
+            )?;
+            Ok(output)
         }
-
-      
-    };
+        Idx::At(axis) => {
+            let mut output =
+                materialize_output::<T, B>(&tensor.meta, tensor.backend.clone(), axes)?;
+            tensor.backend.apply_reduce(
+                (&tensor.buf, &tensor.meta),
+                (&mut output.buf, &output.meta),
+                *axis,
+                op,
+            )?;
+            Ok(output)
+        }
+        _ => Err(TensorError::WrongDims(
+            "Reduction over multiple axes is not implemented yet.".to_string(),
+        )),
+    }
 }
+
 
 impl<T: TensorValue, B: Backend, V> ReductionOp<T, B> for V
 where
@@ -91,9 +98,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::Sum, axes, a)
+            do_reduce(ReductionOpTypes::Sum, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::Sum, axes, t)
+            do_reduce(ReductionOpTypes::Sum, &axes, &t)
         }
     }
 
@@ -102,9 +109,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::Prod, axes, a)
+            do_reduce(ReductionOpTypes::Prod, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::Prod, axes, t)
+            do_reduce(ReductionOpTypes::Prod, &axes, &t)
         }
     }
 
@@ -113,9 +120,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::Max, axes, a)
+            do_reduce(ReductionOpTypes::Max, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::Max, axes, t)
+            do_reduce(ReductionOpTypes::Max, &axes, &t)
         }
     }
 
@@ -124,9 +131,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::Min, axes, a)
+            do_reduce(ReductionOpTypes::Min, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::Min, axes, t)
+            do_reduce(ReductionOpTypes::Min, &axes, &t)
         }
     }
 
@@ -135,9 +142,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::Mean, axes, a)
+            do_reduce(ReductionOpTypes::Mean, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::Mean, axes, t)
+            do_reduce(ReductionOpTypes::Mean, &axes, &t)
         }
     }
 
@@ -146,9 +153,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, a)
+            do_reduce(ReductionOpTypes::UnbiasedVariance, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::UnbiasedVariance, axes, t)
+            do_reduce(ReductionOpTypes::UnbiasedVariance, &axes, &t)
         }
     }
 
@@ -157,9 +164,9 @@ where
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
-            do_reduce!(ReductionOpTypes::PopVariance, axes, a)
+            do_reduce(ReductionOpTypes::PopVariance, &axes, &a)
         } else {
-            do_reduce!(ReductionOpTypes::PopVariance, axes, t)
+            do_reduce(ReductionOpTypes::PopVariance, &axes, &t)
         }
     }
 }
