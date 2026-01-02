@@ -8,7 +8,7 @@ use cudarc::{
     driver::{CudaContext, CudaSlice, DevicePtr},
 };
 
-use crate::backend::ContiguityTypes;
+use crate::{backend::ContiguityTypes, ops::reduction::{NormType, ReductionOpTypes}};
 use crate::{
     backend::{cpu::Cpu, Backend, BackendMatMul},
     core::{
@@ -139,6 +139,151 @@ macro_rules! impl_cpu_unary {
         }
     };
 }
+
+// Put this somewhere visible (module scope), then invoke it inside your impl block.
+
+// Cargo.toml:
+// paste = "1"
+
+macro_rules! specify_trait_unary_cabal {
+    // ===== entry: no extra bounds =====
+    { $op:ident } => {
+        specify_trait_unary_cabal! { @impl $op where T: }
+    };
+
+    // ===== entry: with extra bounds =====
+    { $op:ident where T: $($extra:tt)+ } => {
+        specify_trait_unary_cabal! { @impl $op where T: $($extra)+ }
+    };
+
+    // ===== implementation =====
+    ( @impl $op:ident where T: $($extra_bounds:tt)* ) => {
+        paste::paste! {
+            fn [<apply_ $op _contiguous>]<T: TensorValue $($extra_bounds)*>(
+                &self,
+                buf: &mut Self::Buf<T>,
+                start: usize,
+                len: usize,
+            ) -> Result<(), TensorError> {
+                let stream = self.stream();
+
+                macro_rules! launch {
+                    ($launch_fn:ident, $t:ty) => {{
+                        let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                        let data_ptr = raw_ptr as *mut $t;
+                        unsafe { $launch_fn(data_ptr, start, len, DEFAULT_BLOCK_SIZE); }
+                        self.dirty();
+                        Ok(())
+                    }};
+                }
+
+                paste::paste! {
+                    match std::any::TypeId::of::<T>() {
+                        id if id == std::any::TypeId::of::<f32>() =>
+                            launch!([<launch_ $op _contiguous_f32>], f32),
+                        id if id == std::any::TypeId::of::<f64>() =>
+                            launch!([<launch_ $op _contiguous_f64>], f64),
+                        _ => Err(TensorError::CudaError(format!(
+                            "Unsupported type for CUDA {} operation (float-only for now)",
+                            stringify!($op),
+                        ))),
+                    }
+                }
+            }
+
+            fn [<apply_ $op _1d_strided>]<T: TensorValue $($extra_bounds)*>(
+                &self,
+                buf: &mut Self::Buf<T>,
+                offset: usize,
+                stride: isize,
+                len: usize,
+            ) -> Result<(), TensorError> {
+                let stream = self.stream();
+
+                macro_rules! launch {
+                    ($launch_fn:ident, $t:ty) => {{
+                        let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                        let data_ptr = raw_ptr as *mut $t;
+                        unsafe { $launch_fn(data_ptr, offset, stride, len, DEFAULT_BLOCK_SIZE); }
+                        self.dirty();
+                        Ok(())
+                    }};
+                }
+
+                paste::paste! {
+                    match std::any::TypeId::of::<T>() {
+                        id if id == std::any::TypeId::of::<f32>() =>
+                            launch!([<launch_ $op _strided_f32>], f32),
+                        id if id == std::any::TypeId::of::<f64>() =>
+                            launch!([<launch_ $op _strided_f64>], f64),
+                        _ => Err(TensorError::CudaError(format!(
+                            "Unsupported type for CUDA {} operation (float-only for now)",
+                            stringify!($op),
+                        ))),
+                    }
+                }
+            }
+
+            fn [<apply_ $op _nd>]<T: TensorValue $($extra_bounds)*>(
+                &self,
+                buf: &mut Self::Buf<T>,
+                offset: usize,
+                shape: &[usize],
+                stride: &[isize],
+            ) -> Result<(), TensorError> {
+                let stream = self.stream();
+                let rank = shape.len();
+                let size = shape.iter().product::<usize>();
+
+                // allocate device memory for shape/stride
+                let shape_buf = self.alloc_from_slice(
+                    shape.iter().copied().map(|x| x as u64).collect::<Vec<u64>>().into_boxed_slice()
+                )?;
+                let stride_buf = self.alloc_from_slice(
+                    stride.iter().copied().map(|x| x as i64).collect::<Vec<i64>>().into_boxed_slice()
+                )?;
+
+                let (stride_ptr, _) = stride_buf.ptr.device_ptr(&stream);
+                let (shape_ptr,  _) = shape_buf.ptr.device_ptr(&stream);
+
+                macro_rules! launch {
+                    ($launch_fn:ident, $t:ty) => {{
+                        let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+                        let data_ptr = raw_ptr as *mut $t;
+                        unsafe {
+                            $launch_fn(
+                                data_ptr,
+                                offset,
+                                stride_ptr as *const isize,
+                                shape_ptr  as *const usize,
+                                rank,
+                                size,
+                                DEFAULT_BLOCK_SIZE,
+                            );
+                        }
+                        self.dirty();
+                        Ok(())
+                    }};
+                }
+
+                paste::paste! {
+                    match std::any::TypeId::of::<T>() {
+                        id if id == std::any::TypeId::of::<f32>() =>
+                            launch!([<launch_ $op _nd_affine_f32>], f32),
+                        id if id == std::any::TypeId::of::<f64>() =>
+                            launch!([<launch_ $op _nd_affine_f64>], f64),
+                        _ => Err(TensorError::CudaError(format!(
+                            "Unsupported type for CUDA {} operation (float-only for now)",
+                            stringify!($op),
+                        ))),
+                    }
+                }
+            }
+        }
+    };
+}
+
+
 
 impl Backend for Cuda {
     type Buf<T: TensorValue> = CudaBuf<T>;
@@ -897,179 +1042,181 @@ impl Backend for Cuda {
 
     
 
-    fn apply_relu_contiguous<T: TensorValue>(
-        &self,
-        buf: &mut Self::Buf<T>,
-        start: usize,
-        len: usize,
-    ) -> Result<(), TensorError> {
-        let stream = self.stream();
+    // fn apply_relu_contiguous<T: TensorValue>(
+    //     &self,
+    //     buf: &mut Self::Buf<T>,
+    //     start: usize,
+    //     len: usize,
+    // ) -> Result<(), TensorError> {
+    //     let stream = self.stream();
 
-        macro_rules! launch_negate {
-            ($launch_fn:ident, $t:ty) => {{
-                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
-                let data_ptr = raw_ptr as *mut $t;
+    //     macro_rules! launch_negate {
+    //         ($launch_fn:ident, $t:ty) => {{
+    //             let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+    //             let data_ptr = raw_ptr as *mut $t;
 
-                unsafe {
-                    $launch_fn(data_ptr as *mut $t, start, len, DEFAULT_BLOCK_SIZE);
-                }
-                self.dirty();
-                Ok(())
-            }};
-        }
+    //             unsafe {
+    //                 $launch_fn(data_ptr as *mut $t, start, len, DEFAULT_BLOCK_SIZE);
+    //             }
+    //             self.dirty();
+    //             Ok(())
+    //         }};
+    //     }
 
-        // Dispatch based on type - only signed types support negation
-        match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<f32>() => {
-                launch_negate!(launch_relu_contiguous_f32, f32)
-            }
-            id if id == std::any::TypeId::of::<f64>() => {
-                launch_negate!(launch_relu_contiguous_f64, f64)
-            }
-            id if id == std::any::TypeId::of::<i8>() => {
-                launch_negate!(launch_relu_contiguous_i8, i8)
-            }
-            id if id == std::any::TypeId::of::<i16>() => {
-                launch_negate!(launch_relu_contiguous_i16, i16)
-            }
-            id if id == std::any::TypeId::of::<i32>() => {
-                launch_negate!(launch_relu_contiguous_i32, i32)
-            }
-            id if id == std::any::TypeId::of::<i64>() => {
-                launch_negate!(launch_relu_contiguous_i64, i64)
-            }
-            id if id == std::any::TypeId::of::<i128>() => {
-                launch_negate!(launch_relu_contiguous_i128, i128)
-            }
-            _ => Err(TensorError::CudaError(
-                "Unsupported type for CUDA negation operation".to_string(),
-            )),
-        }
-    }
+    //     // Dispatch based on type - only signed types support negation
+    //     match std::any::TypeId::of::<T>() {
+    //         id if id == std::any::TypeId::of::<f32>() => {
+    //             launch_negate!(launch_relu_contiguous_f32, f32)
+    //         }
+    //         id if id == std::any::TypeId::of::<f64>() => {
+    //             launch_negate!(launch_relu_contiguous_f64, f64)
+    //         }
+    //         id if id == std::any::TypeId::of::<i8>() => {
+    //             launch_negate!(launch_relu_contiguous_i8, i8)
+    //         }
+    //         id if id == std::any::TypeId::of::<i16>() => {
+    //             launch_negate!(launch_relu_contiguous_i16, i16)
+    //         }
+    //         id if id == std::any::TypeId::of::<i32>() => {
+    //             launch_negate!(launch_relu_contiguous_i32, i32)
+    //         }
+    //         id if id == std::any::TypeId::of::<i64>() => {
+    //             launch_negate!(launch_relu_contiguous_i64, i64)
+    //         }
+    //         id if id == std::any::TypeId::of::<i128>() => {
+    //             launch_negate!(launch_relu_contiguous_i128, i128)
+    //         }
+    //         _ => Err(TensorError::CudaError(
+    //             "Unsupported type for CUDA negation operation".to_string(),
+    //         )),
+    //     }
+    // }
 
-    fn apply_relu_1d_strided<T: TensorValue>(
-        &self,
-        buf: &mut Self::Buf<T>,
-        offset: usize,
-        stride: isize,
-        len: usize,
-    ) -> Result<(), TensorError> {
-        // todo!()
-        println!("Strided.");
-        let stream = self.stream();
+    // fn apply_relu_1d_strided<T: TensorValue>(
+    //     &self,
+    //     buf: &mut Self::Buf<T>,
+    //     offset: usize,
+    //     stride: isize,
+    //     len: usize,
+    // ) -> Result<(), TensorError> {
+    //     // todo!()
+    //     let stream = self.stream();
 
-        macro_rules! launch_relu {
-            ($launch_fn:ident, $t:ty) => {{
-                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
-                let data_ptr = raw_ptr as *mut $t;
+    //     macro_rules! launch_relu {
+    //         ($launch_fn:ident, $t:ty) => {{
+    //             let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+    //             let data_ptr = raw_ptr as *mut $t;
 
-                unsafe {
-                    $launch_fn(data_ptr as *mut $t, offset, stride, len, DEFAULT_BLOCK_SIZE);
-                }
-                self.dirty();
-                Ok(())
-            }};
-        }
+    //             unsafe {
+    //                 $launch_fn(data_ptr as *mut $t, offset, stride, len, DEFAULT_BLOCK_SIZE);
+    //             }
+    //             self.dirty();
+    //             Ok(())
+    //         }};
+    //     }
 
-        // Dispatch based on type - only signed types support negation
-        match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<f32>() => launch_relu!(launch_relu_strided_f32, f32),
-            id if id == std::any::TypeId::of::<f64>() => launch_relu!(launch_relu_strided_f64, f64),
-            id if id == std::any::TypeId::of::<i8>() => launch_relu!(launch_relu_strided_i8, i8),
-            id if id == std::any::TypeId::of::<i16>() => launch_relu!(launch_relu_strided_i16, i16),
-            id if id == std::any::TypeId::of::<i32>() => launch_relu!(launch_relu_strided_i32, i32),
-            id if id == std::any::TypeId::of::<i64>() => launch_relu!(launch_relu_strided_i64, i64),
-            id if id == std::any::TypeId::of::<i128>() => {
-                launch_relu!(launch_relu_strided_i128, i128)
-            }
-            _ => Err(TensorError::CudaError(
-                "Unsupported type for CUDA negation operation".to_string(),
-            )),
-        }
-    }
+    //     // Dispatch based on type - only signed types support negation
+    //     match std::any::TypeId::of::<T>() {
+    //         id if id == std::any::TypeId::of::<f32>() => launch_relu!(launch_relu_strided_f32, f32),
+    //         id if id == std::any::TypeId::of::<f64>() => launch_relu!(launch_relu_strided_f64, f64),
+    //         id if id == std::any::TypeId::of::<i8>() => launch_relu!(launch_relu_strided_i8, i8),
+    //         id if id == std::any::TypeId::of::<i16>() => launch_relu!(launch_relu_strided_i16, i16),
+    //         id if id == std::any::TypeId::of::<i32>() => launch_relu!(launch_relu_strided_i32, i32),
+    //         id if id == std::any::TypeId::of::<i64>() => launch_relu!(launch_relu_strided_i64, i64),
+    //         id if id == std::any::TypeId::of::<i128>() => {
+    //             launch_relu!(launch_relu_strided_i128, i128)
+    //         }
+    //         _ => Err(TensorError::CudaError(
+    //             "Unsupported type for CUDA negation operation".to_string(),
+    //         )),
+    //     }
+    // }
 
-    fn apply_relu_nd<T: TensorValue>(
-        &self,
-        buf: &mut Self::Buf<T>,
-        offset: usize,
-        shape: &[usize],
-        stride: &[isize],
-    ) -> Result<(), TensorError> {
-        // todo!()
-        let stream = self.stream();
-        let rank = shape.len();
-        let size = shape.iter().product::<usize>();
+    // fn apply_relu_nd<T: TensorValue>(
+    //     &self,
+    //     buf: &mut Self::Buf<T>,
+    //     offset: usize,
+    //     shape: &[usize],
+    //     stride: &[isize],
+    // ) -> Result<(), TensorError> {
+    //     // todo!()
+    //     let stream = self.stream();
+    //     let rank = shape.len();
+    //     let size = shape.iter().product::<usize>();
 
-        // Allocate device memory for strides and shapes
-        let shape_buf = self.alloc_from_slice(
-            shape
-                .to_vec()
-                .into_iter()
-                .map(|x| x as u64)
-                .collect::<Vec<u64>>()
-                .into_boxed_slice(),
-        )?;
-        let stride_buf = self.alloc_from_slice(
-            stride
-                .to_vec()
-                .into_iter()
-                .map(|x| x as i64)
-                .collect::<Vec<i64>>()
-                .into_boxed_slice(),
-        )?;
+    //     // Allocate device memory for strides and shapes
+    //     let shape_buf = self.alloc_from_slice(
+    //         shape
+    //             .to_vec()
+    //             .into_iter()
+    //             .map(|x| x as u64)
+    //             .collect::<Vec<u64>>()
+    //             .into_boxed_slice(),
+    //     )?;
+    //     let stride_buf = self.alloc_from_slice(
+    //         stride
+    //             .to_vec()
+    //             .into_iter()
+    //             .map(|x| x as i64)
+    //             .collect::<Vec<i64>>()
+    //             .into_boxed_slice(),
+    //     )?;
 
-        let (stride_ptr, _) = stride_buf.ptr.device_ptr(&stream);
-        let (shape_ptr, _) = shape_buf.ptr.device_ptr(&stream);
+    //     let (stride_ptr, _) = stride_buf.ptr.device_ptr(&stream);
+    //     let (shape_ptr, _) = shape_buf.ptr.device_ptr(&stream);
 
-        macro_rules! launch_negate {
-            ($launch_fn:ident, $t:ty) => {{
-                let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
-                let data_ptr = raw_ptr as *mut $t;
+    //     macro_rules! launch_negate {
+    //         ($launch_fn:ident, $t:ty) => {{
+    //             let (raw_ptr, _) = buf.ptr.device_ptr(&stream);
+    //             let data_ptr = raw_ptr as *mut $t;
 
-                unsafe {
-                    $launch_fn(
-                        data_ptr as *mut $t,
-                        offset,
-                        stride_ptr as *const isize,
-                        shape_ptr as *const usize,
-                        rank,
-                        size,
-                        DEFAULT_BLOCK_SIZE,
-                    );
-                }
-                self.dirty();
-                Ok(())
-            }};
-        }
+    //             unsafe {
+    //                 $launch_fn(
+    //                     data_ptr as *mut $t,
+    //                     offset,
+    //                     stride_ptr as *const isize,
+    //                     shape_ptr as *const usize,
+    //                     rank,
+    //                     size,
+    //                     DEFAULT_BLOCK_SIZE,
+    //                 );
+    //             }
+    //             self.dirty();
+    //             Ok(())
+    //         }};
+    //     }
 
-        // Dispatch based on type - only signed types support negation
-        match std::any::TypeId::of::<T>() {
-            id if id == std::any::TypeId::of::<f32>() => {
-                launch_negate!(launch_relu_nd_affine_f32, f32)
-            }
-            id if id == std::any::TypeId::of::<f64>() => {
-                launch_negate!(launch_relu_nd_affine_f64, f64)
-            }
-            id if id == std::any::TypeId::of::<i8>() => {
-                launch_negate!(launch_relu_nd_affine_i8, i8)
-            }
-            id if id == std::any::TypeId::of::<i16>() => {
-                launch_negate!(launch_relu_nd_affine_i16, i16)
-            }
-            id if id == std::any::TypeId::of::<i32>() => {
-                launch_negate!(launch_relu_nd_affine_i32, i32)
-            }
-            id if id == std::any::TypeId::of::<i64>() => {
-                launch_negate!(launch_relu_nd_affine_i64, i64)
-            }
-            id if id == std::any::TypeId::of::<i128>() => {
-                launch_negate!(launch_relu_nd_affine_i128, i128)
-            }
-            _ => Err(TensorError::CudaError(
-                "Unsupported type for CUDA negation operation".to_string(),
-            )),
-        }
-    }
+    //     // Dispatch based on type - only signed types support negation
+    //     match std::any::TypeId::of::<T>() {
+    //         id if id == std::any::TypeId::of::<f32>() => {
+    //             launch_negate!(launch_relu_nd_affine_f32, f32)
+    //         }
+    //         id if id == std::any::TypeId::of::<f64>() => {
+    //             launch_negate!(launch_relu_nd_affine_f64, f64)
+    //         }
+    //         id if id == std::any::TypeId::of::<i8>() => {
+    //             launch_negate!(launch_relu_nd_affine_i8, i8)
+    //         }
+    //         id if id == std::any::TypeId::of::<i16>() => {
+    //             launch_negate!(launch_relu_nd_affine_i16, i16)
+    //         }
+    //         id if id == std::any::TypeId::of::<i32>() => {
+    //             launch_negate!(launch_relu_nd_affine_i32, i32)
+    //         }
+    //         id if id == std::any::TypeId::of::<i64>() => {
+    //             launch_negate!(launch_relu_nd_affine_i64, i64)
+    //         }
+    //         id if id == std::any::TypeId::of::<i128>() => {
+    //             launch_negate!(launch_relu_nd_affine_i128, i128)
+    //         }
+    //         _ => Err(TensorError::CudaError(
+    //             "Unsupported type for CUDA negation operation".to_string(),
+    //         )),
+    //     }
+    // }
+
+    specify_trait_unary_cabal!{relu}
+    specify_trait_unary_cabal!{abs}
 
     fn apply_sigmoid_contiguous<T: TensorValue + InvExp>(
         &self,
@@ -1357,7 +1504,7 @@ impl Backend for Cuda {
         len: usize, 
         op: crate::ops::reduction::ReductionOpTypes
     ) -> Result<(), TensorError> {
-        todo!()
+        apply_reduction_contiguous_single_elem(self, src, dst, start, len, op)
     }
     
     fn apply_reduce_contiguous_nd<T: TensorValue>(
@@ -1367,34 +1514,71 @@ impl Backend for Cuda {
         dim: crate::core::Dim,
         op: crate::ops::reduction::ReductionOpTypes
     ) -> Result<(), TensorError> {
-        todo!()
+        apply_nd_reduction_contiguous(self, src, dst, dim, op)
     }
     
+
+    fn apply_reduce_total<T: TensorValue>(
+            &self, 
+            src: (&Self::Buf<T>, &MetaTensor), 
+            mut dst: (&mut Self::Buf<T>, &MetaTensor), 
+            dim: crate::core::Dim,
+            op: crate::ops::reduction::ReductionOpTypes
+        ) -> Result<(), TensorError> {
+        apply_reduction_contiguous_single_elem(self, &src.0, &mut dst.0, src.1.offset(), src.1.size(), op)
+    }
+
     // impl_cpu_unary!{ relu, _temp }
     // impl_cpu_unary! { neg, _temp }
     // impl_cpu_unary! { sigmoid, _temp }
 }
 
-impl Cuda {
-    pub fn _test_apply_sum_flat_contiguous<T: TensorValue>(
-        backend: &Cuda,
-        buf: &mut <Cuda as Backend>::Buf<T>,
-        out: &mut <Cuda as Backend>::Buf<T>,
-        start: usize,
-        len: usize,
-    ) {
-        apply_sum_flat_contiguous(backend, buf, out, start, len);
+
+
+
+
+#[inline]
+fn populate_reduction_settings(
+    op: &ReductionOpTypes
+) -> ReductionSettings {
+    let mut settings = ReductionSettings {
+        is_std: false,
+        unbiased: false,
+        norm_type: 0
+    };
+
+    match &op {
+        ReductionOpTypes::Variance { unbiased } => {
+            settings.unbiased = *unbiased;
+        }
+        ReductionOpTypes::Stdev { unbiased } => {
+            settings.unbiased = *unbiased;
+            settings.is_std = true;
+        }
+        ReductionOpTypes::Norm(ntype) => match ntype {
+            NormType::L1 => settings.norm_type = 1,
+            NormType::L2 => settings.norm_type = 2
+        }
+        _ => {}
     }
+    settings
 }
 
-fn apply_sum_flat_contiguous<T: TensorValue>(
+
+fn apply_reduction_contiguous_single_elem<T: TensorValue>(
     backend: &Cuda,
-    buf: &mut <Cuda as Backend>::Buf<T>,
+    buf: &<Cuda as Backend>::Buf<T>,
     out: &mut <Cuda as Backend>::Buf<T>,
     start: usize,
     len: usize,
+    op: ReductionOpTypes,
+    // settings: &ReductionSettings
+
 ) -> Result<(), TensorError> {
     let stream = backend.stream();
+
+
+    let settings = populate_reduction_settings(&op);
 
     macro_rules! launch_negate {
         ($launch_fn:ident, $t:ty) => {{
@@ -1410,6 +1594,8 @@ fn apply_sum_flat_contiguous<T: TensorValue>(
                     out_ptr as *mut $t,
                     start,
                     len,
+                    op.get_code(),
+                    &settings as *const ReductionSettings,
                     DEFAULT_BLOCK_SIZE,
                 );
             }
@@ -1422,7 +1608,7 @@ fn apply_sum_flat_contiguous<T: TensorValue>(
     match std::any::TypeId::of::<T>() {
         // id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
         id if id == std::any::TypeId::of::<f64>() => {
-            launch_negate!(launch_flat_contiguous_reduce_sum_double, f64)
+            launch_negate!(launch_flat_contiguous_reduce_f64, f64)
         }
         _ => Err(TensorError::CudaError(
             "Unsupported type for CUDA negation operation".to_string(),
@@ -1433,12 +1619,16 @@ fn apply_sum_flat_contiguous<T: TensorValue>(
 
 
 /// This assumes a  contiguous tensor.
-fn _apply_sum_contiguous<T: TensorValue>(
+fn apply_nd_reduction_contiguous<T: TensorValue>(
     backend: &Cuda,
-    (in_d, in_d_meta): (&mut <Cuda as Backend>::Buf<T>, MetaTensor),
-    (out_d, _): (&mut <Cuda as Backend>::Buf<T>, MetaTensor),
-    axis: usize
+    (in_d, in_d_meta): (&<Cuda as Backend>::Buf<T>, &MetaTensor),
+    (out_d, _): (&mut <Cuda as Backend>::Buf<T>, &MetaTensor),
+    axis: usize,
+    code: ReductionOpTypes
 ) -> Result<(), TensorError> {
+
+
+    let settings = populate_reduction_settings(&code);
 
 
     // This is a temporary limitation of the system.
@@ -1446,6 +1636,11 @@ fn _apply_sum_contiguous<T: TensorValue>(
     
 
     let stream = backend.stream();
+
+    // let settings = unsafe {
+    //     stream
+    //         .alloc::<ReductionSettings>(size_of::<ReductionSettings>())?
+    // };
 
 
     // Calculate the reduction length.
@@ -1474,6 +1669,8 @@ fn _apply_sum_contiguous<T: TensorValue>(
                     inner,
                     red_len,
                     outer,
+                    code.get_code(),
+                    &settings as *const ReductionSettings,
                     DEFAULT_BLOCK_SIZE
                 );
             }
@@ -1486,7 +1683,7 @@ fn _apply_sum_contiguous<T: TensorValue>(
     match std::any::TypeId::of::<T>() {
         // id if id == std::any::TypeId::of::<f32>() => launch_negate!(launch_tanh_contiguous_f32, f32),
         id if id == std::any::TypeId::of::<f64>() => {
-            launch_negate!(launch_nd_sum_double, f64)
+            launch_negate!(launch_nd_reduce_contiguous_f64, f64)
         }
         _ => Err(TensorError::CudaError(
             "Unsupported type for CUDA negation operation".to_string(),
@@ -1690,31 +1887,223 @@ generic_matmul_impl!(types::boolean, launch_matmul_boolean, bool);
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use crate::{
-        backend::cuda::{_apply_sum_contiguous, Cuda},
-        core::{MetaTensorView, primitives::CudaTensor, tensor::AsTensor},
-        ops::unary::{InplaceUnaryOp, Tanh},
+        backend::cuda::{Cuda, apply_nd_reduction_contiguous},
+        core::{MetaTensorView, Tensor, idx::Idx, primitives::CudaTensor, tensor::{AsTensor, TensorAccess}, value::TensorValue},
+        ops::{reduction::{NormType, ReductionOp, TotalReductionOp}, unary::{InplaceUnaryOp, Tanh}},
     };
 
     #[test]
-    pub fn test_reductio() {
+    pub fn test_reduce_total_sum_case1() {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, 0.3, 0.3, -0.1, -0.3, 0.3], (4, 2))
                 .unwrap();
-        println!("CUDA: {:?}", cuda.owned().cpu().unwrap());
-        // cuda.tanh_inplace();
-
-        let start = cuda.offset();
-        let size = cuda.size();
-
-        let sus = cuda.backend;
-
-        let mut out = CudaTensor::<f64>::from_buf(vec![0.0], (1,)).unwrap();
-
-        Cuda::_test_apply_sum_flat_contiguous(&sus, &mut cuda.buf, &mut out.buf, start, size);
-
-        println!("OUT: {:?}", out.cpu());
+        assert_eq!(cuda.total_sum().unwrap().item().unwrap(), 1.1);
     }
+
+    #[test]
+    pub fn test_reduce_total_max_case1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, 0.3, 0.3, -0.1, -0.3, 0.3], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.max(&Idx::Item).unwrap().item().unwrap(), 0.3);
+    }
+
+     #[test]
+    pub fn test_reduce_total_min_case1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, -0.9, 0.3, -0.1, -0.3, 0.3], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.min(&Idx::Item).unwrap().item().unwrap(), -0.9);
+    }
+
+
+    #[test]
+    pub fn test_reduce_total_prod_case1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.prod(&Idx::Item).unwrap().item().unwrap(), 40320.);
+    }
+
+    #[test]
+    pub fn test_reduce_total_mean_case1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.mean(&Idx::Item).unwrap().item().unwrap(), 4.5);
+    }
+
+    #[test]
+    pub fn test_reduce_total_variance_unbiased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.var(&Idx::Item).unwrap().item().unwrap(), 6.0);
+    }
+
+    #[test]
+    pub fn test_reduce_total_variance_biased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.pop_var(&Idx::Item).unwrap().item().unwrap(), 5.25);
+    }
+
+    #[test]
+    pub fn test_reduce_total_stdev_unbiased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::Item, true).unwrap().item().unwrap(), 2.449489742783178);
+    }
+
+    #[test]
+    pub fn test_reduce_total_stdev_biased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::Item, false).unwrap().item().unwrap(), 2.29128784747792);
+    }
+
+    #[test]
+    pub fn test_reduce_total_norm_l1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.norm(NormType::L1, &Idx::Item).unwrap().item().unwrap(), 36.);
+    }
+
+    #[test]
+    pub fn test_reduce_total_norm_l2() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.norm(NormType::L2, &Idx::Item).unwrap().item().unwrap(), 14.2828568570857);
+    }
+
+    #[test]
+    pub fn test_reduce_sum_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 0., 1., 0., 1., 1., 1., 0.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.sum(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![2., 3.], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_max_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![3., 5., 6., 8., 1., 2., -1., 4.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.max(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![8., 4.], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_min_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![3., 5., 6., 8., 1., 2., -1., 4.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.min(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![3., -1.], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_prod_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![3., 5., 6., 8., 1., 2., -1., 4.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.prod(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![720., -8.], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_mean_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.mean(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![2.5, 6.5], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+
+    #[test]
+    pub fn test_reduce_mean_case2() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.mean(&Idx::At(1))?.cpu()?, CudaTensor::from_buf(vec![3.0, 4.0, 5.0, 6.0], (4, 1))?.cpu()?);
+        Ok(())
+    }
+
+ 
+
+    #[test]
+    pub fn test_reduce_variance_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.var(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1.6666666666666667f64, 1.6666666666666667], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_pop_var_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.pop_var(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1.25, 1.25], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_stdev_unbiased() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::At(0), true)?.cpu()?, CudaTensor::from_buf(vec![1.2909944487358056, 1.2909944487358056], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_stdev_biased() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::At(0), false)?.cpu()?, CudaTensor::from_buf(vec![1.118033988749895, 1.118033988749895], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_logsumexp() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.logsumexp(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![4.440189698561196, 8.440189698561195], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_norm_l1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.norm(NormType::L1, &Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![10.0, 26.0], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_norm_l2() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.norm(NormType::L2, &Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![5.477225575051661, 13.19090595827292], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
 
     #[test]
     pub fn test_reductio_multi() {
@@ -1725,18 +2114,21 @@ mod tests {
 
         println!("Original: {:?}", cuda.cpu());
 
-        let mut out: crate::core::primitives::TensorBase<f64, Cuda> = CudaTensor::from_buf(vec![0.0f64, 0.0f64], (2,))
-            .unwrap();
+        let result = cuda.sum(&Idx::At(1));
+        println!("Result: {:?}", result.unwrap().cpu());
+
+        // let mut out: crate::core::primitives::TensorBase<f64, Cuda> = CudaTensor::from_buf(vec![0.0f64, 0.0f64], (2,))
+        //     .unwrap();
 
 
-        let in_tensor = (&mut cuda.buf, cuda.meta.clone());
-        let out_tensor = (&mut out.buf, out.meta.clone());
+        // let in_tensor = (&mut cuda.buf, cuda.meta.clone());
+        // let out_tensor = (&mut out.buf, out.meta.clone());
 
-        _apply_sum_contiguous(&cuda.backend, in_tensor,  out_tensor, 1)
-            .unwrap();
+        // _apply_sum_contiguous(&cuda.backend, in_tensor,  out_tensor, 1)
+        //     .unwrap();
         
 
-        println!("Output: {:?}", out.cpu());
+        // println!("Output: {:?}", out.cpu());
 
         // println!("CUDA: {:?}", cuda.owned().cpu().unwrap());
         // // cuda.tanh_inplace();
