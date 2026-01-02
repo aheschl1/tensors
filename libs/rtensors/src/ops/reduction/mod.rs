@@ -9,6 +9,9 @@ pub enum ReductionOpTypes {
     Mean,
     Variance {
         unbiased: bool
+    },
+    Stdev {
+        unbiased: bool
     }
 }
 
@@ -21,7 +24,8 @@ impl ReductionOpTypes {
             Self::Max => 3,
             Self::Min => 4,
             Self::Mean => 5,
-            Self::Variance {..} => 6
+            Self::Variance {..} | Self::Stdev { .. } => 6
+            
         }
     }
 }
@@ -39,6 +43,7 @@ pub trait ReductionOp : Sized {
     fn min(&self, axes: &Idx) -> Result<Self, TensorError>;
     fn var(&self, axes: &Idx) -> Result<Self, TensorError>;
     fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn std(&self, axes: &Idx, unbiased: bool) -> Result<Self, TensorError>;
 }
 
 macro_rules! do_reduce {
@@ -147,6 +152,15 @@ where
     }
     fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError> {
         let code = ReductionOpTypes::Variance { unbiased: false };
+        if !self.is_contiguous() {
+            let a = self.contiguous();
+            do_reduce!(code, axes, a)
+        }else {
+            do_reduce!(code, axes, self)
+        }
+    }
+     fn std(&self, axes: &Idx, unbiased: bool) -> Result<Self, TensorError> {
+        let code = ReductionOpTypes::Stdev { unbiased };
         if !self.is_contiguous() {
             let a = self.contiguous();
             do_reduce!(code, axes, a)

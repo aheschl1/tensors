@@ -1414,6 +1414,10 @@ fn populate_reduction_settings(
         ReductionOpTypes::Variance { unbiased } => {
             settings.unbiased = *unbiased;
         }
+        ReductionOpTypes::Stdev { unbiased } => {
+            settings.unbiased = *unbiased;
+            settings.is_std = true;
+        }
         _ => {}
     }
     settings
@@ -1745,8 +1749,8 @@ mod tests {
     use std::error::Error;
 
     use crate::{
-        backend::cuda::{apply_nd_reduction_contiguous, Cuda},
-        core::{MetaTensorView, Tensor, idx::Idx, primitives::CudaTensor, tensor::{AsTensor, TensorAccess}},
+        backend::cuda::{Cuda, apply_nd_reduction_contiguous},
+        core::{MetaTensorView, Tensor, idx::Idx, primitives::CudaTensor, tensor::{AsTensor, TensorAccess}, value::TensorValue},
         ops::{reduction::{ReductionOp, TotalReductionOp}, unary::{InplaceUnaryOp, Tanh}},
     };
 
@@ -1808,6 +1812,22 @@ mod tests {
     }
 
     #[test]
+    pub fn test_reduce_total_stdev_unbiased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::Item, true).unwrap().item().unwrap(), 2.449489742783178);
+    }
+
+    #[test]
+    pub fn test_reduce_total_stdev_biased() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::Item, false).unwrap().item().unwrap(), 2.29128784747792);
+    }
+
+    #[test]
     pub fn test_reduce_sum_case1() -> Result<(), Box<dyn Error>> {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![1., 0., 1., 0., 1., 1., 1., 0.], (4, 2))
@@ -1862,6 +1882,8 @@ mod tests {
         Ok(())
     }
 
+ 
+
     #[test]
     pub fn test_reduce_variance_case1() -> Result<(), Box<dyn Error>> {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
@@ -1879,6 +1901,25 @@ mod tests {
         assert_eq!(cuda.pop_var(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1.25, 1.25], (1, 2))?.cpu()?);
         Ok(())
     }
+
+    #[test]
+    pub fn test_reduce_stdev_unbiased() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::At(0), true)?.cpu()?, CudaTensor::from_buf(vec![1.2909944487358056, 1.2909944487358056], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_reduce_stdev_biased() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  2., 3., 4., 5., 6., 7., 8.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.std(&Idx::At(0), false)?.cpu()?, CudaTensor::from_buf(vec![1.118033988749895, 1.118033988749895], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
 
     #[test]
     pub fn test_reductio_multi() {
