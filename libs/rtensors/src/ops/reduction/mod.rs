@@ -2,13 +2,32 @@ use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_
 
 
 pub enum ReductionOpTypes {
-    Sum = 1,
-    Prod = 2,
-    Max = 3,
-    Min = 4,
-    Mean = 5,
-    PopVariance = 6,
-    UnbiasedVariance = 7
+    Sum,
+    Prod,
+    Max,
+    Min,
+    Mean,
+    Variance {
+        unbiased: bool
+    },
+    Stdev {
+        unbiased: bool
+    }
+}
+
+impl ReductionOpTypes {
+    #[inline(always)]
+    pub const fn get_code(&self) -> u8 {
+        match self {
+            Self::Sum => 1,
+            Self::Prod => 2,
+            Self::Max => 3,
+            Self::Min => 4,
+            Self::Mean => 5,
+            Self::Variance {..} | Self::Stdev { .. } => 6
+            
+        }
+    }
 }
 
 pub trait TotalReductionOp<T: TensorValue, B: Backend>: Sized + ReductionOp<T, B> {
@@ -35,14 +54,16 @@ pub trait TotalReductionOp<T: TensorValue, B: Backend>: Sized + ReductionOp<T, B
     }
 }
 
-pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
-    fn sum(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn prod(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn mean(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn max(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn min(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
-    fn pop_var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+pub trait ReductionOp : Sized {
+    
+    fn sum(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn prod(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn mean(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn max(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn min(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn var(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError>;
+    fn std(&self, axes: &Idx, unbiased: bool) -> Result<Self, TensorError>;
 }
 
 impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
@@ -147,26 +168,31 @@ where
             do_reduce(ReductionOpTypes::Mean, &axes, &t)
         }
     }
-
-    fn var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
-        let axes = axes.into();
-        let t = self.view();
-        if !t.is_contiguous() {
-            let a = t.contiguous();
-            do_reduce(ReductionOpTypes::UnbiasedVariance, &axes, &a)
-        } else {
-            do_reduce(ReductionOpTypes::UnbiasedVariance, &axes, &t)
+    fn var(&self, axes: &Idx) -> Result<Self, TensorError> {
+        let code = ReductionOpTypes::Variance { unbiased: true };
+        if !self.is_contiguous() {
+            let a = self.contiguous();
+            do_reduce!(code, axes, a)
+        }else {
+            do_reduce!(code, axes, self)
         }
     }
-
-    fn pop_var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
-        let axes = axes.into();
-        let t = self.view();
-        if !t.is_contiguous() {
-            let a = t.contiguous();
-            do_reduce(ReductionOpTypes::PopVariance, &axes, &a)
-        } else {
-            do_reduce(ReductionOpTypes::PopVariance, &axes, &t)
+    fn pop_var(&self, axes: &Idx) -> Result<Self, TensorError> {
+        let code = ReductionOpTypes::Variance { unbiased: false };
+        if !self.is_contiguous() {
+            let a = self.contiguous();
+            do_reduce!(code, axes, a)
+        }else {
+            do_reduce!(code, axes, self)
+        }
+    }
+     fn std(&self, axes: &Idx, unbiased: bool) -> Result<Self, TensorError> {
+        let code = ReductionOpTypes::Stdev { unbiased };
+        if !self.is_contiguous() {
+            let a = self.contiguous();
+            do_reduce!(code, axes, a)
+        }else {
+            do_reduce!(code, axes, self)
         }
     }
 }
