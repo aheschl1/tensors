@@ -1,7 +1,6 @@
 #[cfg(feature = "cuda")]
 use cudarc::driver::DeviceRepr;
 
-
 #[cfg(feature = "cuda")]
 /// Trait for types that can be stored in tensors (with CUDA support).
 /// 
@@ -20,6 +19,7 @@ pub trait TensorValue:
     std::ops::SubAssign +
     std::ops::MulAssign +
     std::ops::Div<Output = Self> + 
+    Absolute +
     'static
 {
     const DTYPE: crate::core::value::DType;
@@ -74,6 +74,7 @@ pub trait TensorValue:
     std::ops::AddAssign +
     std::ops::SubAssign +
     std::ops::MulAssign +
+    Absolute +
     std::ops::Div<Output = Self> + 
     'static
 {
@@ -142,6 +143,54 @@ impl_default!(u64, 0u64, 1u64, u64::MIN, u64::MAX);
 impl_default!(u128, 0u128, 1u128, u128::MIN, u128::MAX);
 // impl_default!(usize, 0usize, 1usize, usize::MIN, usize::MAX);
 
+pub trait Absolute {
+    fn absolute(&self) -> Self;
+}
+
+macro_rules! impl_absolute {
+    ($($type:ty,)+) => {
+        $(
+            impl Absolute for $type {
+                #[inline(always)]
+                fn absolute(&self) -> Self {
+                    (*self).abs()
+                }
+            }
+        )+
+    }
+}
+macro_rules! impl_absolute_ident {
+    ($($type:ty,)+) => {
+        $(
+            impl Absolute for $type {
+                #[inline(always)]
+                fn absolute(&self) -> Self {
+                    *self
+                }
+            }
+        )+
+    }
+}
+
+impl_absolute!(
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    f32,
+    f64,
+);
+
+impl_absolute_ident!(
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    types::boolean,
+);
+
 #[cfg(feature = "remote")]
 use serde::{Deserialize, Serialize};
 
@@ -170,7 +219,7 @@ pub mod types {
     #[cfg(feature = "cuda")]
     use cudarc::driver::DeviceRepr;
 
-    use crate::core::value::{DType, TypeConstants, TensorValue};
+    use crate::core::value::{DType, TensorValue, TypeConstants};
 
     #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
     #[repr(C)]
