@@ -1,4 +1,4 @@
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape, TensorView, TensorViewMut}};
+use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape}};
 
 
 pub enum ReductionOpTypes {
@@ -13,36 +13,36 @@ pub enum ReductionOpTypes {
 
 pub trait TotalReductionOp<T: TensorValue, B: Backend>: Sized + ReductionOp<T, B> {
     fn total_sum(&self) -> Result<TensorBase<T, B>, TensorError> {
-        self.sum(&Idx::Item)
+        self.sum(Idx::Item)
     }
     fn total_prod(&self) -> Result<TensorBase<T, B>, TensorError> {
-        self.prod(&Idx::Item)
+        self.prod(Idx::Item)
     }
     fn total_mean(&self) -> Result<TensorBase<T, B>, TensorError> {
-        self.mean(&Idx::Item)
+        self.mean(Idx::Item)
     }
     fn total_max(&self) -> Result<TensorBase<T, B>, TensorError>{
-        self.max(&Idx::Item)
+        self.max(Idx::Item)
     }
     fn total_min(&self) -> Result<TensorBase<T, B>, TensorError>{
-        self.min(&Idx::Item)
+        self.min(Idx::Item)
     }
     fn total_var(&self) -> Result<TensorBase<T, B>, TensorError>{
-        self.var(&Idx::Item)
+        self.var(Idx::Item)
     }
     fn total_pop_var(&self) -> Result<TensorBase<T, B>, TensorError>{
-        self.pop_var(&Idx::Item)
+        self.pop_var(Idx::Item)
     }
 }
 
 pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
-    fn sum(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn prod(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn mean(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn max(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn min(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
-    fn pop_var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>;
+    fn sum(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn prod(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn mean(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn max(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn min(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
+    fn pop_var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError>;
 }
 
 impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
@@ -64,11 +64,11 @@ macro_rules! do_reduce {
                 // Err(TensorError::WrongDims("test".to_string()))
             }
             Idx::At(axis) => {
-                let mut output = materialize_output::<T, B>(&$tensor.meta, $tensor.backend.clone(), $axes)?;
+                let mut output = materialize_output::<T, B>(&$tensor.meta, $tensor.backend.clone(), &$axes)?;
                 $tensor.backend.apply_reduce(
                     (&$tensor.buf, &$tensor.meta), 
                     (&mut output.buf, &output.meta), 
-                    *axis,
+                    axis,
                     $op,
                 )?;
                 Ok(output)
@@ -86,7 +86,8 @@ impl<T: TensorValue, B: Backend, V> ReductionOp<T, B> for V
 where
     V: AsView<T, B>,
 {
-    fn sum(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn sum(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -96,7 +97,8 @@ where
         }
     }
 
-    fn prod(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn prod(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -106,7 +108,8 @@ where
         }
     }
 
-    fn max(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn max(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -116,7 +119,8 @@ where
         }
     }
 
-    fn min(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn min(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -126,7 +130,8 @@ where
         }
     }
 
-    fn mean(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn mean(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -136,7 +141,8 @@ where
         }
     }
 
-    fn var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();
@@ -146,7 +152,8 @@ where
         }
     }
 
-    fn pop_var(&self, axes: &Idx) -> Result<TensorBase<T, B>, TensorError> {
+    fn pop_var(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
         let t = self.view();
         if !t.is_contiguous() {
             let a = t.contiguous();

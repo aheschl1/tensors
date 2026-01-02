@@ -1715,7 +1715,7 @@ mod tests {
 
     #[test]
     pub fn test_reduce_total_sum_case1() {
-        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+        let cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, 0.3, 0.3, -0.1, -0.3, 0.3], (4, 2))
                 .unwrap();
         assert_eq!(cuda.total_sum().unwrap().item().unwrap(), 1.1);
@@ -1723,7 +1723,7 @@ mod tests {
 
     #[test]
     pub fn test_reduce_total_max_case1() {
-         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+         let cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, 0.3, 0.3, -0.1, -0.3, 0.3], (4, 2))
                 .unwrap();
         assert_eq!(cuda.max(&Idx::Item).unwrap().item().unwrap(), 0.3);
@@ -1731,19 +1731,19 @@ mod tests {
 
      #[test]
     pub fn test_reduce_total_min_case1() {
-         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+         let cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![0.2, 0.3, 0.1, -0.9, 0.3, -0.1, -0.3, 0.3], (4, 2))
                 .unwrap();
-        assert_eq!(cuda.min(&Idx::Item).unwrap().item().unwrap(), -0.9);
+        assert_eq!(cuda.total_min().unwrap().item().unwrap(), -0.9);
     }
 
 
     #[test]
     pub fn test_reduce_total_prod_case1() {
-         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+         let cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
             CudaTensor::<f64>::from_buf(vec![1., 2., 3., 4., 5., 6., 7., 8.], (4, 2))
                 .unwrap();
-        assert_eq!(cuda.prod(&Idx::Item).unwrap().item().unwrap(), 40320.);
+        assert_eq!(cuda.prod(()).unwrap().item().unwrap(), 40320.);
     }
 
     #[test]
