@@ -770,22 +770,163 @@ void dispatch_flat_contiguous_reduce(
     }
 }
 
+template<typename T>
+__global__ void unpack(
+    cub::KeyValuePair<int, T> *p,
+    uint64_t *out
+)
+{
+    if(threadIdx.x == 0)
+        *out = (uint64_t) p->key;
+
+}
+
+template <typename T>
+void dispatch_flat_contiguous_argmax(
+    const T *data,
+    uint64_t *out,
+    size_t start,
+    size_t num_items,
+    ReductionOpCode op,
+    const ReductionSettings *settings,
+    unsigned int block_size)
+{
+
+    const T *d_in = data + start;
+
+
+    using Pair = cub::KeyValuePair<int, T>;
+
+    // output pair (index, value)
+    Pair *d_pair_out = nullptr;
+    cudaMalloc(&d_pair_out, sizeof(Pair));
+
+    void *d_temp = nullptr;
+    size_t temp_bytes = 0;
+
+    // temp size
+    cub::DeviceReduce::ArgMax(nullptr, temp_bytes, d_in, d_pair_out, (int)num_items);
+    cudaMalloc(&d_temp, temp_bytes);
+
+    // run
+    cub::DeviceReduce::ArgMax(d_temp, temp_bytes, d_in, d_pair_out, (int)num_items);
+
+    unpack<T><<<1, 1>>>(d_pair_out, out);
+
+    cudaFree(d_temp);
+    cudaFree(d_pair_out);
+}
+
+
+
+template <typename T, typename Op, typename PostOp>
+__global__ void argmax_axis_contig_kernel(
+    const T *__restrict__ in,
+    uint64_t *__restrict__ out,
+    size_t offset,
+    size_t outer,
+    size_t R,
+    size_t inner,
+    Op op,
+    T init,
+    PostOp post)
+{
+
+    using Pair = cub::KeyValuePair<uint64_t, T>;
+
+    size_t out_linear = (size_t)blockIdx.x;
+    size_t out_elems = outer * inner;
+    if (out_linear >= out_elems)
+        return;
+
+    // Map linear output index -> (o, i)
+    size_t o = out_linear / inner;
+    size_t i = out_linear - o * inner;
+
+    // Base pointer for this output element: in[o, 0, i]
+    const T *base = in + offset + o * (R * inner) + i;
+
+    T thread_biggest = init;
+    uint64_t biggest_idx = 0;
+
+    for (size_t k = threadIdx.x; k < R; k += (size_t)blockDim.x)
+    {
+
+        T cur = base[k * inner];
+        if(thread_biggest < cur) {
+            thread_biggest = cur;
+            biggest_idx = (uint64_t) k * inner;
+        }
+    }
+
+    // Reduce thread_sum across the block (simple shared-memory reduction)
+    __shared__ Pair smem[256];
+    smem[threadIdx.x] = Pair { biggest_idx, thread_biggest };
+    __syncthreads();
+
+    // power-of-two reduction
+    for (unsigned s = blockDim.x / 2; s > 0; s >>= 1)
+    {
+        if (threadIdx.x < s)
+        {
+            if(smem[threadIdx.x].value < smem[threadIdx.x + s].value) {
+                smem[threadIdx.x] = smem[threadIdx.x + s];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0)
+    {
+        out[out_linear] = smem[0].key;
+    }
+}
+
+
+template <typename T>
+void reduce_axis_strided_fast_launch(
+    const T *d_in,
+    uint64_t *d_out,
+    size_t offset,
+    size_t outer,
+    size_t r,
+    size_t inner,
+    ReductionOpCode op,
+    const ReductionSettings *settings,
+    unsigned int blocksize)
+{
+    size_t out_elems = outer * inner;
+    if (out_elems == 0)
+    {
+        // This is the fast path.
+        return;
+    }
+
+    int block = blocksize;
+
+    dim3 grid((unsigned)out_elems);
+
+    if(op == OP_ARGMAX) {
+        argmax_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)std::numeric_limits<T>::lowest(), PostNothing{});
+    }
+    
+}
 
 
 
 #define DECLARE_ARGMAX_LAUNCHERS(TYPE, SUFFIX)                                                    \
-    extern "C" void launch_flat_argmax_reduce_##SUFFIX(                                      \
-        const TYPE *data, TYPE *out, size_t start, size_t len,                                   \
+    extern "C" void launch_flat_contiguous_argmax_##SUFFIX(                                      \
+        const TYPE *data, uint64_t *out, size_t start, size_t len,                                   \
         ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
     {                                                                                            \
-        dispatch_flat_contiguous_reduce<TYPE>(data, out, start, len, code, settings, block_size); \
+        dispatch_flat_contiguous_argmax<TYPE>(data, out, start, len, code, settings, block_size); \
     }                                                                                            \
                                                                                                  \
     extern "C" void launch_nd_argmax_contiguous_##SUFFIX(                                        \
-        TYPE *data, TYPE *out, size_t offset, size_t outer, size_t r, size_t inner,             \
+        TYPE *data, uint64_t *out, size_t offset, size_t outer, size_t r, size_t inner,             \
         ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
     {                                                                                            \
-        sum_axis_strided_fast_launch<TYPE>(                                                      \
+        reduce_axis_strided_fast_launch<TYPE>(                                                      \
             data, out, offset, outer, r, inner, code, settings, block_size);                    \
     }
 
