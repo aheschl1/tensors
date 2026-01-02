@@ -1,16 +1,18 @@
-use crate::{backend::Backend, core::{primitives::TensorBase, primops::{Exp, InvExp}, tensor::{AsTensor, AsViewMut}, value::TensorValue}};
+use crate::{backend::Backend, core::{primitives::TensorBase, primops::{Exp, InvExp, SquareRoot}, tensor::{AsTensor, AsViewMut}, value::TensorValue}};
 
 pub mod neg;
 pub mod relu;
 mod sigmoid;
 mod tanh;
 mod abs;
+mod sqrt;
 
 pub use neg::Negate;
 pub use relu::Relu;
 pub use sigmoid::Sigmoid;
 pub use tanh::Tanh;
 pub use abs::Abs;
+pub use sqrt::Sqrt;
 
 pub trait InplaceUnaryOp<T: TensorValue, B: Backend> {
     fn apply_relu(
@@ -27,6 +29,11 @@ pub trait InplaceUnaryOp<T: TensorValue, B: Backend> {
     )
     where 
         T: Exp + InvExp;
+    fn apply_sqrt(
+        &mut self
+    )
+    where 
+        T: SquareRoot;
     fn apply_abs(&mut self);
 }
 
@@ -74,6 +81,14 @@ impl<T: TensorValue, B: Backend, V: AsViewMut<T, B>> InplaceUnaryOp<T, B> for V 
     }
     fn apply_abs(&mut self) {
         self.abs_inplace();
+    }
+    
+    fn apply_sqrt(
+        &mut self
+    )
+    where 
+        T: SquareRoot {
+        self.sqrt_inplace();
     }
 }
 
