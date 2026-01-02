@@ -292,12 +292,11 @@ impl Backend for Cpu {
         Ok(())
     }
     
-    
-
     impl_cpu_unary!{ neg, _negate where T: std::ops::Neg<Output = T> }
     impl_cpu_unary!{ relu, _relu }
     impl_cpu_unary!{ sigmoid, _sigmoid where T: InvExp}
     impl_cpu_unary!{ tanh, _tanh where T: Exp + InvExp }
+    impl_cpu_unary!{ abs, _abs }
     
     fn apply_reduce_contiguous_flat<T: TensorValue>(
         &self, 
@@ -320,18 +319,6 @@ impl Backend for Cpu {
         todo!()
     }
 
-    fn apply_abs_1d_strided<T:TensorValue>(&self,buf: &mut Self::Buf<T>,offset:usize,stride:isize,len:usize) -> Result<(),TensorError> {
-        todo!()
-    }
-
-    fn apply_abs_contiguous<T:TensorValue>(&self,buf: &mut Self::Buf<T>,start:usize,len:usize) -> Result<(),TensorError> {
-        todo!()
-    }
-
-    fn apply_abs_nd<T:TensorValue>(&self,buf: &mut Self::Buf<T>,offset:usize,shape: &[usize],stride: &[isize],) -> Result<(),TensorError> {
-        todo!()
-    }
-
 }
 
 #[inline]
@@ -339,6 +326,11 @@ fn _tanh<T: TensorValue + InvExp + Exp>(x: &mut T) -> T {
     let a = x.apply_exp();
     let b = x.apply_invexp();
     (a - b) / (a + b)
+}
+
+#[inline]
+fn _abs<T: TensorValue>(x: &mut T) -> T {
+    x.absolute()
 }
 
 
