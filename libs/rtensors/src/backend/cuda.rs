@@ -1980,6 +1980,17 @@ mod tests {
         Ok(())
     }
 
+    
+
+    #[test]
+    pub fn test_reduce_argmin_case1() -> Result<(), Box<dyn Error>> {
+        let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![1.,  -4., 3., 2., 9., 6., -7., 1.], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.argmin(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1, 2], (1, 2))?.cpu()?);
+        Ok(())
+    }
+
 
     #[test]
     pub fn test_reduce_mean_case2() -> Result<(), Box<dyn Error>> {
