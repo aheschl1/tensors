@@ -264,6 +264,61 @@ pub trait Backend: Send + Sync + 'static + Clone {
         }
 
     }
+
+
+    fn apply_argmax_contiguous_flat<T: WeightValue>(
+        &self, 
+        src: &Self::Buf<T>, 
+        dst: &mut Self::Buf<u64>, 
+        start: usize, 
+        len: usize, 
+        op: ReductionOpTypes
+    ) -> Result<(), TensorError>;
+
+    fn apply_argmax_contiguous_nd<T: WeightValue>(
+        &self, 
+        src: (&Self::Buf<T>, &MetaTensor), 
+        dst: (&mut Self::Buf<u64>, &MetaTensor), 
+        dim: Dim,
+        op: ReductionOpTypes
+    ) -> Result<(), TensorError>;
+
+    /// currently assuming that the tensor is contiguous
+    fn apply_argmax<T: WeightValue>(
+        &self, 
+        src: (&Self::Buf<T>, &MetaTensor), 
+        dst: (&mut Self::Buf<u64>, &MetaTensor), 
+        dim: Dim,
+        op: ReductionOpTypes
+    ) -> Result<(), TensorError>{
+
+        let (src_buf, src_meta) = src;
+        let (dst_buf, dst_meta) = dst;
+
+        if !src_meta.is_contiguous(){
+            return Err(TensorError::WrongDims(
+                "Reduction over non-contiguous tensors is not implemented yet.".to_string(),
+            ));
+        }
+
+        if src_meta.rank() == 1 {
+            self.apply_argmax_contiguous_flat(
+                src_buf,
+                dst_buf,
+                src_meta.offset,
+                src_meta.size(),
+                op
+            )
+        }else{
+            self.apply_argmax_contiguous_nd(
+                (src_buf, src_meta),
+                (dst_buf, dst_meta),
+                dim,
+                op
+            )
+        }
+
+    }
 }
 
 pub trait BackendMatMul<T: TensorValue>: Backend {
