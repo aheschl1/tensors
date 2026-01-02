@@ -408,7 +408,7 @@ void launch_flat_contiguous_reduce_variance(
 }
 
 template <typename T, typename Op, typename PostOp>
-__global__ void sum_axis_contig_kernel(
+__global__ void fold_axis_contig_kernel(
     const T *__restrict__ in,
     T *__restrict__ out,
     size_t offset,
@@ -684,19 +684,19 @@ void sum_axis_strided_fast_launch(
     switch (op)
     {
     case OP_SUM:
-        sum_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostNothing{});
+        fold_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostNothing{});
         break;
     case OP_MAX:
-        sum_axis_contig_kernel<T, MaxOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MaxOp{}, std::numeric_limits<T>::lowest(), PostNothing{});
+        fold_axis_contig_kernel<T, MaxOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MaxOp{}, std::numeric_limits<T>::lowest(), PostNothing{});
         break;
     case OP_MIN:
-        sum_axis_contig_kernel<T, MinOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MinOp{}, std::numeric_limits<T>::max(), PostNothing{});
+        fold_axis_contig_kernel<T, MinOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MinOp{}, std::numeric_limits<T>::max(), PostNothing{});
         break;
     case OP_PROD:
-        sum_axis_contig_kernel<T, ProdOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, ProdOp{}, (T)1, PostNothing{});
+        fold_axis_contig_kernel<T, ProdOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, ProdOp{}, (T)1, PostNothing{});
         break;
     case OP_MEAN:
-        sum_axis_contig_kernel<T, SumOp, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostDivTotal{});
+        fold_axis_contig_kernel<T, SumOp, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostDivTotal{});
         break;
     case OP_VARIANCE:
         var_axis_contig_kernel<T, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, PostDivTotal{}, settings->unbiased, settings->is_std);
@@ -706,7 +706,7 @@ void sum_axis_strided_fast_launch(
         break;
     case OP_NORM:
         if(settings->norm_type == 1) {
-            sum_axis_contig_kernel<T, L1SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, L1SumOp{}, (T)0, PostNothing{});
+            fold_axis_contig_kernel<T, L1SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, L1SumOp{}, (T)0, PostNothing{});
         } else if(settings->norm_type == 2) {
             map_axis_contig_kernel<T, SumOp, PostSqrt, SquareUnaryOp><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SquareUnaryOp {}, SumOp{}, (T)0, PostSqrt {});
         }
@@ -770,21 +770,36 @@ void dispatch_flat_contiguous_reduce(
     }
 }
 
-extern "C" void launch_flat_contiguous_reduce_f64(const double *data, double *out, size_t start, size_t len, ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)
-{
-    dispatch_flat_contiguous_reduce<double>(data, out, start, len, code, settings, block_size);
-}
+#define DECLARE_REDUCTION_LAUNCHERS(TYPE, SUFFIX)                                                    \
+    extern "C" void launch_flat_contiguous_reduce_##SUFFIX(                                      \
+        const TYPE *data, TYPE *out, size_t start, size_t len,                                   \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
+    {                                                                                            \
+        dispatch_flat_contiguous_reduce<TYPE>(data, out, start, len, code, settings, block_size); \
+    }                                                                                            \
+                                                                                                 \
+    extern "C" void launch_nd_reduce_contiguous_##SUFFIX(                                        \
+        TYPE *data, TYPE *out, size_t offset, size_t outer, size_t r, size_t inner,             \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
+    {                                                                                            \
+        sum_axis_strided_fast_launch<TYPE>(                                                      \
+            data, out, offset, outer, r, inner, code, settings, block_size);                    \
+    }
 
-extern "C" void launch_nd_reduce_contiguous_f64(double *data, double *out, size_t offset, size_t outer, size_t r, size_t inner, ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)
-{
-    sum_axis_strided_fast_launch<double>(
-        data,
-        out,
-        offset,
-        outer,
-        r,
-        inner,
-        code,
-        settings,
-        block_size);
-}
+// Float types
+DECLARE_REDUCTION_LAUNCHERS(float,  f32)
+DECLARE_REDUCTION_LAUNCHERS(double, f64)
+
+// // Unsigned integer types
+// DECLARE_REDUCTION_LAUNCHERS(uint8_t,  u8)
+// DECLARE_REDUCTION_LAUNCHERS(uint16_t, u16)
+// DECLARE_REDUCTION_LAUNCHERS(uint32_t, u32)
+// DECLARE_REDUCTION_LAUNCHERS(uint64_t, u64)
+// DECLARE_REDUCTION_LAUNCHERS(__uint128_t, u128)
+
+// // Signed integer types
+// DECLARE_REDUCTION_LAUNCHERS(int8_t,  i8)
+// DECLARE_REDUCTION_LAUNCHERS(int16_t, i16)
+// DECLARE_REDUCTION_LAUNCHERS(int32_t, i32)
+// DECLARE_REDUCTION_LAUNCHERS(int64_t, i64)
+// DECLARE_REDUCTION_LAUNCHERS(__int128_t, i128)
