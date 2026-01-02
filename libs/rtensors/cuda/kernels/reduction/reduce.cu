@@ -408,7 +408,7 @@ void launch_flat_contiguous_reduce_variance(
 }
 
 template <typename T, typename Op, typename PostOp>
-__global__ void sum_axis_contig_kernel(
+__global__ void fold_axis_contig_kernel(
     const T *__restrict__ in,
     T *__restrict__ out,
     size_t offset,
@@ -684,19 +684,19 @@ void sum_axis_strided_fast_launch(
     switch (op)
     {
     case OP_SUM:
-        sum_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostNothing{});
+        fold_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostNothing{});
         break;
     case OP_MAX:
-        sum_axis_contig_kernel<T, MaxOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MaxOp{}, std::numeric_limits<T>::lowest(), PostNothing{});
+        fold_axis_contig_kernel<T, MaxOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MaxOp{}, std::numeric_limits<T>::lowest(), PostNothing{});
         break;
     case OP_MIN:
-        sum_axis_contig_kernel<T, MinOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MinOp{}, std::numeric_limits<T>::max(), PostNothing{});
+        fold_axis_contig_kernel<T, MinOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, MinOp{}, std::numeric_limits<T>::max(), PostNothing{});
         break;
     case OP_PROD:
-        sum_axis_contig_kernel<T, ProdOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, ProdOp{}, (T)1, PostNothing{});
+        fold_axis_contig_kernel<T, ProdOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, ProdOp{}, (T)1, PostNothing{});
         break;
     case OP_MEAN:
-        sum_axis_contig_kernel<T, SumOp, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostDivTotal{});
+        fold_axis_contig_kernel<T, SumOp, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)0, PostDivTotal{});
         break;
     case OP_VARIANCE:
         var_axis_contig_kernel<T, PostDivTotal><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, PostDivTotal{}, settings->unbiased, settings->is_std);
@@ -706,7 +706,7 @@ void sum_axis_strided_fast_launch(
         break;
     case OP_NORM:
         if(settings->norm_type == 1) {
-            sum_axis_contig_kernel<T, L1SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, L1SumOp{}, (T)0, PostNothing{});
+            fold_axis_contig_kernel<T, L1SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, L1SumOp{}, (T)0, PostNothing{});
         } else if(settings->norm_type == 2) {
             map_axis_contig_kernel<T, SumOp, PostSqrt, SquareUnaryOp><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SquareUnaryOp {}, SumOp{}, (T)0, PostSqrt {});
         }

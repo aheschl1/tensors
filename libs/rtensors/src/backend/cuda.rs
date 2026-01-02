@@ -8,7 +8,7 @@ use cudarc::{
     driver::{CudaContext, CudaSlice, DevicePtr},
 };
 
-use crate::{backend::ContiguityTypes, core::value::WeightValue, ops::reduction::{NormType, ReductionOpTypes}};
+use crate::{backend::ContiguityTypes, core::{value::WeightValue, Dim}, ops::reduction::{NormType, ReductionOpTypes}};
 use crate::{
     backend::{Backend, BackendMatMul},
     core::{
@@ -1394,7 +1394,7 @@ fn apply_nd_reduction_contiguous<T: WeightValue>(
     backend: &Cuda,
     (in_d, in_d_meta): (&<Cuda as Backend>::Buf<T>, &MetaTensor),
     (out_d, _): (&mut <Cuda as Backend>::Buf<T>, &MetaTensor),
-    axis: usize,
+    axis: Dim,
     code: ReductionOpTypes
 ) -> Result<(), TensorError> {
 

@@ -323,7 +323,13 @@ impl Backend for Cpu {
         dim: crate::core::Dim,
         op: crate::ops::reduction::ReductionOpTypes
     ) -> Result<(), TensorError> {
-        todo!()
+        let (in_d, in_d_meta) = src;
+        let (out_d, out_d_meta) = dst;
+
+        let inner = in_d_meta.inner_dimensions(dim);
+        let outer = in_d_meta.outer_dimensions(dim);
+
+        panic!()
     }
 
 }
