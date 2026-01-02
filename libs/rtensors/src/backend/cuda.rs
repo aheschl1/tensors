@@ -1851,7 +1851,6 @@ macro_rules! cublas_impl {
                     stride_c,
                 };
                 // let mut res = self.alloc(b*n*m)?;
-
                 unsafe {
                     // Note: operands are swapped (B, A instead of A, B)
                     self.cublas

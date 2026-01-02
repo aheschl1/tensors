@@ -244,10 +244,17 @@ pub trait Backend: Send + Sync + 'static + Clone {
         dim: Dim,
         op: ReductionOpTypes
     ) -> Result<(), TensorError>{
+
         let (src_buf, src_meta) = src;
         let (dst_buf, dst_meta) = dst;
 
-        if src_meta.rank() == 1 && src_meta.is_contiguous() {
+        if !src_meta.is_contiguous(){
+            return Err(TensorError::WrongDims(
+                "Reduction over non-contiguous tensors is not implemented yet.".to_string(),
+            ));
+        }
+
+        if src_meta.rank() == 1 {
             return self.apply_reduce_contiguous_flat(
                 src_buf,
                 dst_buf,

@@ -1,4 +1,4 @@
-use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape}};
+use crate::{backend::Backend, core::{idx::Idx, primitives::TensorBase, shape_to_stride, tensor::{AsTensor, AsView, TensorError}, value::TensorValue, MetaTensor, MetaTensorView, Shape}};
 
 
 pub enum ReductionOpTypes {
@@ -104,8 +104,7 @@ where
 
 impl<T, B> ReductionOp for TensorBase<T, B>
 where
-    T: TensorValue,
-    B: Backend,
+    V: AsView<T, B>,
 {
    
     fn sum(&self, axes: &Idx) -> Result<Self, TensorError> {
@@ -117,30 +116,36 @@ where
         }
     }
 
-    fn prod(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
-            do_reduce!(ReductionOpTypes::Prod, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Prod, axes, self)
+    fn max(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
+            do_reduce(ReductionOpTypes::Max, &axes, &a)
+        } else {
+            do_reduce(ReductionOpTypes::Max, &axes, &t)
         }
     }
 
-    fn max(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
-            do_reduce!(ReductionOpTypes::Max, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Max, axes, self)
+    fn min(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
+            do_reduce(ReductionOpTypes::Min, &axes, &a)
+        } else {
+            do_reduce(ReductionOpTypes::Min, &axes, &t)
         }
     }
 
-    fn min(&self, axes: &Idx) -> Result<Self, TensorError> {
-        if !self.is_contiguous() {
-            let a = self.contiguous();
-            do_reduce!(ReductionOpTypes::Min, axes, a)
-        }else {
-            do_reduce!(ReductionOpTypes::Min, axes, self)
+    fn mean(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
+        let axes = axes.into();
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
+            do_reduce(ReductionOpTypes::Mean, &axes, &a)
+        } else {
+            do_reduce(ReductionOpTypes::Mean, &axes, &t)
         }
     }
 
@@ -197,6 +202,11 @@ where
         }
     }
 }
+
+
+// implement_reductionop!(TensorBase);
+// implement_reductionop!(TensorView<'a>);
+// implement_reductionop!(TensorViewMut<'a>);
 
 #[inline]
 fn materialize_output<T: TensorValue, B: Backend>(input: &MetaTensor, backend: B, axes: &Idx) -> Result<TensorBase<T, B>, TensorError>{
