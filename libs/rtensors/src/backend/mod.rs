@@ -1,4 +1,3 @@
-use std::ops::Neg;
 
 use crate::{core::{meta::ContiguityTypes, primops::{Exp, InvExp, SquareRoot}, tensor::TensorError, value::TensorValue, Dim, MetaTensor, MetaTensorView}, ops::{base::BinaryOpType, reduction::ReductionOpTypes}};
 
@@ -248,20 +247,20 @@ pub trait Backend: Send + Sync + 'static + Clone {
         }
 
         if src_meta.rank() == 1 {
-            return self.apply_reduce_contiguous_flat(
+            self.apply_reduce_contiguous_flat(
                 src_buf,
                 dst_buf,
                 src_meta.offset,
                 src_meta.size(),
                 op
-            );
+            )
         }else{
-            return self.apply_reduce_contiguous_nd(
+            self.apply_reduce_contiguous_nd(
                 (src_buf, src_meta),
                 (dst_buf, dst_meta),
                 dim,
                 op
-            );
+            )
         }
 
     }

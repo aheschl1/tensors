@@ -1,4 +1,4 @@
-use crate::{backend::Backend, core::{primitives::TensorBase, tensor::{AsTensor, AsViewMut}, value::TensorValue}};
+use crate::{backend::Backend, core::{tensor::AsViewMut, value::TensorValue}};
 
 pub trait Abs<T: TensorValue, B: Backend> {
     fn abs_inplace(&mut self);

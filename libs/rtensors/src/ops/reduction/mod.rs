@@ -97,7 +97,7 @@ where
         Idx::Item => {
             let mut output = TensorBase::from_buf(vec![T::ZERO], vec![])?;
             tensor.backend.apply_reduce_contiguous_flat(
-                &tensor.buf,
+                tensor.buf,
                 &mut output.buf,
                 tensor.meta.offset,
                 tensor.meta.size(),
@@ -109,7 +109,7 @@ where
             let mut output =
                 materialize_output::<T, B>(&tensor.meta, tensor.backend.clone(), axes)?;
             tensor.backend.apply_reduce(
-                (&tensor.buf, &tensor.meta),
+                (tensor.buf, &tensor.meta),
                 (&mut output.buf, &output.meta),
                 *axis,
                 op,

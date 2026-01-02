@@ -8,15 +8,14 @@ use cudarc::{
     driver::{CudaContext, CudaSlice, DevicePtr},
 };
 
-use crate::{backend::ContiguityTypes, core::primops::SquareRoot, ops::reduction::{NormType, ReductionOpTypes}};
+use crate::{backend::ContiguityTypes, ops::reduction::{NormType, ReductionOpTypes}};
 use crate::{
-    backend::{cpu::Cpu, Backend, BackendMatMul},
+    backend::{Backend, BackendMatMul},
     core::{
-        primitives::TensorBase,
         primops::{Exp, InvExp},
         tensor::TensorError,
         value::{types, TensorValue},
-        MetaTensor, Tensor,
+        MetaTensor,
     },
     ops::base::BinaryOpType,
 };
