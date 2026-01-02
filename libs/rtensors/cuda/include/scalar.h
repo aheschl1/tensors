@@ -149,6 +149,20 @@ DECLARE_UNARY_FLOAT_OP_HEADERS(sqrt)
 DECLARE_REDUCTION_OP_HEADERS(float,  f32)
 DECLARE_REDUCTION_OP_HEADERS(double, f64)
 
+
+// Reduction operations
+#define DECLARE_ARGMAX_OP_HEADERS(TYPE, SUFFIX)                                                \
+    void launch_flat_contiguous_argmax_##SUFFIX(                                                  \
+        const TYPE *data, TYPE *out, size_t start, size_t len,                                    \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size);        \
+    void launch_nd_argmax_contiguous_##SUFFIX(                                                    \
+        TYPE *data, TYPE *out, size_t offset, size_t outer, size_t r, size_t inner,              \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size);
+
+// Float types
+DECLARE_ARGMAX_OP_HEADERS(float,  f32)
+DECLARE_ARGMAX_OP_HEADERS(double, f64)
+
 // // Unsigned integer types
 // DECLARE_REDUCTION_OP_HEADERS(uint8_t,  u8)
 // DECLARE_REDUCTION_OP_HEADERS(uint16_t, u16)

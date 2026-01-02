@@ -214,6 +214,9 @@ pub trait TotalReductionOp<T: TensorValue, B: Backend>: Sized + ReductionOp<T, B
     fn total_l2_norm(&self) -> Result<TensorBase<T, B>, TensorError> {
         self.norm(Idx::Item, NormType::L2)
     }
+    fn total_argmax(&self) -> Result<TensorBase<u64, B>, TensorError> {
+        self.argmax(Idx::Item)
+    }
 }
 
 pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
@@ -236,6 +239,8 @@ pub trait ReductionOp<T: TensorValue, B: Backend> : Sized {
     fn l2_norm(&self, axes: impl Into<Idx>) -> Result<TensorBase<T, B>, TensorError> {
         self.norm(axes, NormType::L2)
     }
+
+    fn argmax(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError>;
 }
 
 impl<T: TensorValue, B: Backend, V> TotalReductionOp<T, B> for V where V: ReductionOp<T, B>{}
@@ -267,6 +272,46 @@ where
             let mut output =
                 materialize_output::<T, B>(&tensor.meta, tensor.backend.clone(), axes)?;
             tensor.backend.apply_reduce(
+                (tensor.buf, &tensor.meta),
+                (&mut output.buf, &output.meta),
+                *axis,
+                op,
+            )?;
+            Ok(output)
+        }
+        _ => Err(TensorError::WrongDims(
+            "Reduction over multiple axes is not implemented yet.".to_string(),
+        )),
+    }
+}
+
+#[inline(always)]
+pub fn do_argmax<T, B>(
+    op: ReductionOpTypes,
+    axes: &Idx,
+    tensor: &impl AsView<T, B>,
+) -> Result<TensorBase<u64, B>, TensorError>
+where
+    T: WeightValue,
+    B: Backend,
+{
+    let tensor = tensor.view();
+    match axes {
+        Idx::Item => {
+            let mut output = TensorBase::<u64, _>::from_buf(vec![ 0u64 ], vec![])?;
+            tensor.backend.apply_argmax_contiguous_flat(
+                tensor.buf,
+                &mut output.buf,
+                tensor.meta.offset,
+                tensor.meta.size(),
+                op,
+            )?;
+            Ok(output)
+        }
+        Idx::At(axis) => {
+            let mut output =
+                materialize_output::<u64, B>(&tensor.meta, tensor.backend.clone(), axes)?;
+            tensor.backend.apply_argmax(
                 (tensor.buf, &tensor.meta),
                 (&mut output.buf, &output.meta),
                 *axis,
@@ -391,6 +436,17 @@ where
             do_reduce(code, &axes, &a)
         }else {
             do_reduce(code, &axes, &t)
+        }
+    }
+    fn argmax(&self, axes: impl Into<Idx>) -> Result<TensorBase<u64, B>, TensorError> {
+        let axes = axes.into();
+        let code = ReductionOpTypes::Max;
+        let t = self.view();
+        if !t.is_contiguous() {
+            let a = t.contiguous();
+            do_argmax(code, &axes, &a)
+        }else {
+            do_argmax(code, &axes, &t)
         }
     }
 }

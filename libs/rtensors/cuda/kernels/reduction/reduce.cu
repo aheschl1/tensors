@@ -770,6 +770,30 @@ void dispatch_flat_contiguous_reduce(
     }
 }
 
+
+
+
+#define DECLARE_ARGMAX_LAUNCHERS(TYPE, SUFFIX)                                                    \
+    extern "C" void launch_flat_argmax_reduce_##SUFFIX(                                      \
+        const TYPE *data, TYPE *out, size_t start, size_t len,                                   \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
+    {                                                                                            \
+        dispatch_flat_contiguous_reduce<TYPE>(data, out, start, len, code, settings, block_size); \
+    }                                                                                            \
+                                                                                                 \
+    extern "C" void launch_nd_argmax_contiguous_##SUFFIX(                                        \
+        TYPE *data, TYPE *out, size_t offset, size_t outer, size_t r, size_t inner,             \
+        ReductionOpCode code, const ReductionSettings *settings, unsigned int block_size)        \
+    {                                                                                            \
+        sum_axis_strided_fast_launch<TYPE>(                                                      \
+            data, out, offset, outer, r, inner, code, settings, block_size);                    \
+    }
+
+// Float types
+DECLARE_ARGMAX_LAUNCHERS(float,  f32)
+DECLARE_ARGMAX_LAUNCHERS(double, f64)
+
+
 #define DECLARE_REDUCTION_LAUNCHERS(TYPE, SUFFIX)                                                    \
     extern "C" void launch_flat_contiguous_reduce_##SUFFIX(                                      \
         const TYPE *data, TYPE *out, size_t start, size_t len,                                   \
