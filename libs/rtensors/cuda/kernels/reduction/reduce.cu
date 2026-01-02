@@ -18,6 +18,28 @@ struct SumOp
     }
 };
 
+struct LessOp
+{
+    template <typename T>
+    __device__ __forceinline__
+        bool
+        operator()(const T &a, const T &b) const
+    {
+        return a > b;
+    }
+};
+
+struct GreaterOp
+{
+    template <typename T>
+    __device__ __forceinline__
+        bool
+        operator()(const T &a, const T &b) const
+    {
+        return a < b;
+    }
+};
+
 struct L1SumOp
 {
     template <typename T>
@@ -853,7 +875,7 @@ __global__ void argmax_axis_contig_kernel(
     {
 
         T cur = base[k * inner];
-        if(thread_biggest < cur) {
+        if(op(thread_biggest, cur)) {
             thread_biggest = cur;
             biggest_idx = (uint64_t) k * inner;
         }
@@ -869,7 +891,7 @@ __global__ void argmax_axis_contig_kernel(
     {
         if (threadIdx.x < s)
         {
-            if(smem[threadIdx.x].value < smem[threadIdx.x + s].value) {
+            if(op(smem[threadIdx.x].value, smem[threadIdx.x + s].value)) {
                 smem[threadIdx.x] = smem[threadIdx.x + s];
             }
         }
@@ -907,7 +929,9 @@ void reduce_axis_strided_fast_launch(
     dim3 grid((unsigned)out_elems);
 
     if(op == OP_ARGMAX) {
-        argmax_axis_contig_kernel<T, SumOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, SumOp{}, (T)std::numeric_limits<T>::lowest(), PostNothing{});
+        argmax_axis_contig_kernel<T, GreaterOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, GreaterOp {}, (T)std::numeric_limits<T>::lowest(), PostNothing{});
+    } else if(op == OP_ARGMIN) {
+        argmax_axis_contig_kernel<T, LessOp, PostNothing><<<grid, block>>>(d_in, d_out, offset, outer, r, inner, LessOp {}, (T)std::numeric_limits<T>::max(), PostNothing{});
     }
     
 }
