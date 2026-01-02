@@ -1848,6 +1848,19 @@ mod tests {
         assert_eq!(cuda.total_argmax().unwrap().item().unwrap(), 3);
     }
 
+    #[test]
+    pub fn test_reduce_total_argmin_case1() {
+         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
+            CudaTensor::<f64>::from_buf(vec![
+                0.2, 0.3, 
+                0.1, 0.7, 
+                0.3, -0.1, 
+                -0.3, 0.3
+            ], (4, 2))
+                .unwrap();
+        assert_eq!(cuda.total_argmin().unwrap().item().unwrap(), 6);
+    }
+
      #[test]
     pub fn test_reduce_total_min_case1() {
          let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
@@ -1994,9 +2007,13 @@ mod tests {
     #[test]
     pub fn test_reduce_argmin_case1() -> Result<(), Box<dyn Error>> {
         let mut cuda: crate::core::primitives::TensorBase<f64, crate::backend::cuda::Cuda> =
-            CudaTensor::<f64>::from_buf(vec![1.,  -4., 3., 2., 9., 6., -7., 1.], (4, 2))
+            CudaTensor::<f64>::from_buf(vec![
+                1.,  -4.,
+                3., 2.,
+                9., 6., 
+                -7., 1.], (4, 2))
                 .unwrap();
-        assert_eq!(cuda.argmin(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![1, 2], (1, 2))?.cpu()?);
+        assert_eq!(cuda.argmin(&Idx::At(0))?.cpu()?, CudaTensor::from_buf(vec![3, 0], (1, 2))?.cpu()?);
         Ok(())
     }
 
