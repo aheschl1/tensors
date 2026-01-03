@@ -279,6 +279,7 @@ pub trait Backend: Send + Sync + 'static + Clone {
     specify_trait_unary_cabal!{neg where T: std::ops::Neg<Output = T>}
     specify_trait_unary_cabal!{relu}
     specify_trait_unary_cabal!{sigmoid where T: InvExp}
+    specify_trait_unary_cabal!{silu where T: InvExp}
     specify_trait_unary_cabal!{tanh where T: Exp + InvExp}
     specify_trait_unary_cabal!{abs}
     specify_trait_unary_cabal!{sqrt where T: SquareRoot}

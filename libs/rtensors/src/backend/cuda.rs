@@ -1339,6 +1339,7 @@ impl Backend for Cuda {
     specify_trait_unary_cabal!{ceil}
     specify_trait_unary_cabal!{round}
     specify_trait_unary_cabal!{trunc}
+    specify_trait_unary_cabal!{silu}
 
     // Scalar binary operations
     specify_trait_scalar_cabal!{add}

@@ -294,6 +294,7 @@ impl Backend for Cpu {
     impl_cpu_unary!{ neg, _negate where T: std::ops::Neg<Output = T> }
     impl_cpu_unary!{ relu, _relu }
     impl_cpu_unary!{ sigmoid, _sigmoid where T: InvExp}
+    impl_cpu_unary!{ silu, _silu where T: InvExp}
     impl_cpu_unary!{ tanh, _tanh where T: Exp + InvExp }
     impl_cpu_unary!{ abs, _abs }
     impl_cpu_unary!{ sqrt, _sqrt where T: SquareRoot }
@@ -469,6 +470,14 @@ where
     T: InvExp
 {
     T::ONE / (T::ONE + x.apply_invexp())
+}
+
+#[inline]
+fn _silu<T: TensorValue>(x: &mut T) -> T
+where 
+    T: InvExp
+{
+    *x * _sigmoid(x)
 }
 
 // Scalar binary operation helper functions
