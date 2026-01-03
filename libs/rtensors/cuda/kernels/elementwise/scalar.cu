@@ -11,6 +11,21 @@ struct AddOp {
     }
 };
 
+// log base n
+struct LogOp {
+    template<typename T>
+    __device__ __forceinline__ T operator()(T x, T value) const {
+        return log(x) / log(value);
+    }
+};
+
+struct Log1POp {
+    template<typename T>
+    __device__ __forceinline__ T operator()(T x, T value) const {
+        return log1p(x) / log(value);
+    }
+};
+
 struct SubOp {
     template<typename T>
     __device__ __forceinline__ T operator()(T x, T value) const {
@@ -213,3 +228,9 @@ DECLARE_SCALAR_LAUNCHERS(mul, MulOp, int32_t, i32)
 DECLARE_SCALAR_LAUNCHERS(mul, MulOp, int64_t, i64)
 DECLARE_SCALAR_LAUNCHERS(mul, MulOp, __int128_t, i128)
 DECLARE_SCALAR_LAUNCHERS(mul, MulOp, bool, boolean)
+
+DECLARE_SCALAR_LAUNCHERS(log, LogOp, float,  f32)
+DECLARE_SCALAR_LAUNCHERS(log, LogOp, double,  f64)
+
+DECLARE_SCALAR_LAUNCHERS(log1p, Log1POp, float,  f32)
+DECLARE_SCALAR_LAUNCHERS(log1p, Log1POp, double,  f64)

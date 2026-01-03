@@ -56,6 +56,11 @@ DECLARE_SCALAR_OP_HEADERS(mul, int64_t, i64)
 DECLARE_SCALAR_OP_HEADERS(mul, __int128_t, i128)
 DECLARE_SCALAR_OP_HEADERS(mul, bool, boolean)
 
+DECLARE_SCALAR_OP_HEADERS(log, float, f32)
+DECLARE_SCALAR_OP_HEADERS(log, double, f64)
+DECLARE_SCALAR_OP_HEADERS(log1p, float, f32)
+DECLARE_SCALAR_OP_HEADERS(log1p, double, f64)
+
 // Negation operations
 void launch_negate_contiguous_f32(float* data, size_t start, size_t len, unsigned int block_size);
 void launch_negate_contiguous_f64(double* data, size_t start, size_t len, unsigned int block_size);
