@@ -1346,6 +1346,7 @@ impl Backend for Cuda {
     specify_trait_scalar_cabal!{mul}
     specify_trait_scalar_cabal!{log where T: WeightValue}
     specify_trait_scalar_cabal!{log1p where T: WeightValue}
+    specify_trait_scalar_cabal!{leaky_relu}
 
     fn apply_sigmoid_contiguous<T: TensorValue + InvExp>(
         &self,
