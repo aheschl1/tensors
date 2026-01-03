@@ -37,6 +37,10 @@ pub trait WeightValue :
     fn square_root(&self) -> Self;
     fn nat_log(&self) -> Self;
     fn nat_log1p(&self) -> Self;
+    fn vfloor(&self) -> Self;
+    fn vceil(&self) -> Self;
+    fn vround(&self) -> Self;
+    fn vtrunc(&self) -> Self;
     fn from_usize(value: usize) -> Self {
         Self::from_f32(value as f32)
     }
@@ -73,6 +77,26 @@ impl WeightValue for f32 {
     fn nat_log1p(&self) -> Self {
         self.ln_1p()
     }
+
+    #[inline(always)]
+    fn vfloor(&self) -> Self {
+        self.floor()
+    }
+
+    #[inline(always)]
+    fn vceil(&self) -> Self {
+        self.ceil()
+    }
+
+    #[inline(always)]
+    fn vround(&self) -> Self {
+        self.round()
+    }
+
+    #[inline(always)]
+    fn vtrunc(&self) -> Self {
+        self.trunc()
+    }
 }
 
 impl WeightValue for f64 {
@@ -104,6 +128,26 @@ impl WeightValue for f64 {
     #[inline(always)]
     fn nat_log1p(&self) -> Self {
         self.ln_1p()
+    }
+
+    #[inline(always)]
+    fn vfloor(&self) -> Self {
+        self.floor()
+    }
+
+    #[inline(always)]
+    fn vceil(&self) -> Self {
+        self.ceil()
+    }
+
+    #[inline(always)]
+    fn vround(&self) -> Self {
+        self.round()
+    }
+
+    #[inline(always)]
+    fn vtrunc(&self) -> Self {
+        self.trunc()
     }
 }
 

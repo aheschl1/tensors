@@ -26,6 +26,34 @@ struct Ln1pOp {
     }
 };
 
+struct FloorOp {
+    template<typename  T>
+    __device__ __forceinline__ T operator()(T x) const {
+         return floor(x);
+    }
+};
+
+struct CeilOp {
+    template<typename  T>
+    __device__ __forceinline__ T operator()(T x) const {
+         return ceil(x);
+    }
+};
+
+struct RoundOp {
+    template<typename  T>
+    __device__ __forceinline__ T operator()(T x) const {
+         return round(x);
+    }
+};
+
+struct TruncOp {
+    template<typename  T>
+    __device__ __forceinline__ T operator()(T x) const {
+         return trunc(x);
+    }
+};
+
 struct ExpM1Op {
     template<typename  T>
     __device__ __forceinline__ T operator()(T x) const {
@@ -260,6 +288,18 @@ DECLARE_UNARY_LAUNCHERS(ln, LnOp, double, f64)
 
 DECLARE_UNARY_LAUNCHERS(ln1p, Ln1pOp, float,  f32)
 DECLARE_UNARY_LAUNCHERS(ln1p, Ln1pOp, double, f64)
+
+DECLARE_UNARY_LAUNCHERS(floor, FloorOp, float,  f32)
+DECLARE_UNARY_LAUNCHERS(floor, FloorOp, double, f64)
+
+DECLARE_UNARY_LAUNCHERS(ceil, CeilOp, float,  f32)
+DECLARE_UNARY_LAUNCHERS(ceil, CeilOp, double, f64)
+
+DECLARE_UNARY_LAUNCHERS(round, RoundOp, float,  f32)
+DECLARE_UNARY_LAUNCHERS(round, RoundOp, double, f64)
+
+DECLARE_UNARY_LAUNCHERS(trunc, TruncOp, float,  f32)
+DECLARE_UNARY_LAUNCHERS(trunc, TruncOp, double, f64)
 
 DECLARE_UNARY_LAUNCHERS(expm1, ExpM1Op, float,  f32)
 DECLARE_UNARY_LAUNCHERS(expm1, ExpM1Op, double, f64)

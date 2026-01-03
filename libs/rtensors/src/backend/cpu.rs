@@ -301,6 +301,10 @@ impl Backend for Cpu {
     impl_cpu_unary!{ ln, _ln where T: WeightValue }
     impl_cpu_unary!{ expm1, _expm1 where T: Exp }
     impl_cpu_unary!{ ln1p, _ln1p where T: WeightValue }
+    impl_cpu_unary!{ floor, _floor where T: WeightValue }
+    impl_cpu_unary!{ ceil, _ceil where T: WeightValue }
+    impl_cpu_unary!{ round, _round where T: WeightValue }
+    impl_cpu_unary!{ trunc, _trunc where T: WeightValue }
     
     /// go through entire buffer, take everything
     fn apply_reduce_contiguous_flat<T: WeightValue>(
@@ -389,6 +393,26 @@ fn _ln<T: WeightValue>(x: &mut T) -> T {
 #[inline]
 fn _ln1p<T: WeightValue>(x: &mut T) -> T {
     x.nat_log1p()
+}
+
+#[inline]
+fn _floor<T: WeightValue>(x: &mut T) -> T {
+    x.vfloor()
+}
+
+#[inline]
+fn _ceil<T: WeightValue>(x: &mut T) -> T {
+    x.vceil()
+}
+
+#[inline]
+fn _round<T: WeightValue>(x: &mut T) -> T {
+    x.vround()
+}
+
+#[inline]
+fn _trunc<T: WeightValue>(x: &mut T) -> T {
+    x.vtrunc()
 }
 
 #[inline]
